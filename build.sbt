@@ -16,6 +16,8 @@ val sparkVersion = "2.4.3"
 libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-core" % sparkVersion % "compile",
   "org.apache.spark" %% "spark-mllib" % sparkVersion % "compile",
+  "org.apache.spark" %% "spark-avro" % sparkVersion,
+  "org.apache.accumulo" % "accumulo-core" % "2.0.0",
   "org.scalactic" %% "scalactic" % "3.0.5",
   "org.scalatest" %% "scalatest" % "3.0.5",
   "io.spray" %% "spray-json" % "1.3.2",
