@@ -5,7 +5,7 @@ package com.microsoft.ml.spark.automl
 
 import java.util.concurrent._
 
-import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 import com.microsoft.ml.spark.core.contracts.{HasEvaluationMetric, Wrappable}
 import com.microsoft.ml.spark.core.env.InternalWrapper
 import com.microsoft.ml.spark.core.metrics.MetricConstants
@@ -13,18 +13,18 @@ import com.microsoft.ml.spark.core.serialize.{ConstructorReadable, ConstructorWr
 import com.microsoft.ml.spark.train.{ComputeModelStatistics, TrainedClassifierModel, TrainedRegressorModel}
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.ml.param._
-import org.apache.spark.ml.util._
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.ClassificationModel
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.regression.RegressionModel
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.types.StructType
 
 import scala.collection.mutable.ListBuffer
-import scala.concurrent.{Awaitable, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
+import scala.concurrent.{Awaitable, ExecutionContext, Future}
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
 import scala.util.control.NonFatal
 
@@ -94,11 +94,17 @@ class TuneHyperparameters(override val uid: String) extends Estimator[TuneHyperp
   /** @group setParam */
   def setParamSpace(value: ParamSpace): this.type = set(paramSpace, value)
 
+  private class CurrentThreadExecutor extends Executor {
+    def execute(r: Runnable): Unit = {
+      r.run()
+    }
+  }
+
   private def getExecutionContext: ExecutionContext = {
     getParallelism match {
       case 1 =>
-        ExecutionContext.fromExecutorService(MoreExecutors.sameThreadExecutor())
-      case _ =>
+        ExecutionContext.fromExecutor(new CurrentThreadExecutor())
+      case n =>
         val keepAliveSeconds = 60L
         val prefix = s"${this.getClass.getSimpleName}-thread-pool"
         val threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat(prefix + "-%d").build()
@@ -142,7 +148,7 @@ class TuneHyperparameters(override val uid: String) extends Estimator[TuneHyperp
     }
     val numModels = getModels.length
 
-    val metrics = splits.zipWithIndex.map { case ((training, validation), _) =>
+    val metrics = splits.zipWithIndex.map { case ((training, validation), splitIndex) =>
       val trainingDataset = sparkSession.createDataFrame(training, schema).cache()
       val validationDataset = sparkSession.createDataFrame(validation, schema).cache()
 
@@ -158,11 +164,13 @@ class TuneHyperparameters(override val uid: String) extends Estimator[TuneHyperp
           val evaluator = new ComputeModelStatistics()
           evaluator.set(evaluator.evaluationMetric, getEvaluationMetric)
           model match {
-            case _: TrainedRegressorModel =>
+            case _: TrainedRegressorModel => {
               logDebug("Evaluating trained regressor model.")
-            case _: TrainedClassifierModel =>
+            }
+            case _: TrainedClassifierModel => {
               logDebug("Evaluating trained classifier model.")
-            case classificationModel: ClassificationModel[_, _] =>
+            }
+            case classificationModel: ClassificationModel[_, _] => {
               logDebug(s"Evaluating SparkML ${model.uid} classification model.")
               evaluator
                 .setLabelCol(classificationModel.getLabelCol)
@@ -170,13 +178,15 @@ class TuneHyperparameters(override val uid: String) extends Estimator[TuneHyperp
                 .setScoresCol(classificationModel.getRawPredictionCol)
               if (getEvaluationMetric == MetricConstants.AllSparkMetrics)
                 evaluator.setEvaluationMetric(MetricConstants.ClassificationMetricsName)
-            case regressionModel: RegressionModel[_, _] =>
+            }
+            case regressionModel: RegressionModel[_, _] => {
               logDebug(s"Evaluating SparkML ${model.uid} regression model.")
               evaluator
                 .setLabelCol(regressionModel.getLabelCol)
                 .setScoredLabelsCol(regressionModel.getPredictionCol)
               if (getEvaluationMetric == MetricConstants.AllSparkMetrics)
                 evaluator.setEvaluationMetric(MetricConstants.RegressionMetricsName)
+            }
           }
           val metrics = evaluator.transform(scoredDataset)
           val metric = metrics.select(evaluationMetricColumnName).first()(0).toString.toDouble
