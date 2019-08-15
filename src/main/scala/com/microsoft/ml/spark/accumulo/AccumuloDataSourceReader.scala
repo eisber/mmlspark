@@ -3,42 +3,33 @@
 
 package com.microsoft.ml.spark.accumulo
 
-import org.apache.accumulo.core.clientImpl.ClientContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.reader.{DataSourceReader, InputPartition, InputPartitionReader}
+import org.apache.spark.sql.sources.v2.reader.DataSourceReader
+import org.apache.spark.sql.sources.v2.reader.InputPartition
+import org.apache.spark.sql.sources.v2.reader.InputPartitionReader
 import org.apache.spark.sql.types.StructType
-
-import scala.collection.JavaConverters._
+import java.util.{Arrays, List}
 
 @SerialVersionUID(1L)
-class AccumuloDataSourceReader(val schema: StructType, options: DataSourceOptions)
-  extends DataSourceReader with Serializable {
+class AccumuloDataSourceReader(val schema: StructType, options: DataSourceOptions) extends DataSourceReader with Serializable {
 
-  // TODO: get this from somewhere?
-  val maxPartitions = 1000
+  val props = options.asMap()
+  val tableName = options.tableName.get
 
-  def readSchema: StructType = schema
+  override def readSchema: StructType = schema
 
-  def planInputPartitions: java.util.List[InputPartition[InternalRow]] = {
-    val tableName = options.tableName.get
-    val properties = new java.util.Properties()
-    properties.putAll(options.asMap())
+  override def planInputPartitions: List[InputPartition[InternalRow]] = {
+    // TODO: query accumulo server for partitions
+    // https://github.com/apache/accumulo/blob/master/core/src/main/
+    // java/org/apache/accumulo/core/client/mapred/AbstractInputFormat.java#L723
 
-    val client = new ClientContext(properties)
-    val numSplits = client.tableOperations().listSplits(tableName, maxPartitions).size()
-
-    // match partitions to accumulo tabletservers (numSplits + 1) for given table
-    new java.util.ArrayList[InputPartition[InternalRow]](
-    (0 to numSplits)
-      .map(_ => new PartitionReaderFactory(tableName, properties, schema))
-      .asJava)
-  }
-}
-
-class PartitionReaderFactory(tableName: String, properties: java.util.Properties, schema: StructType)
-  extends InputPartition[InternalRow] {
-  def createPartitionReader: InputPartitionReader[InternalRow] = {
-    new AccumuloInputPartitionReader(tableName, properties, schema)
+    Arrays.asList(new InputPartition[InternalRow]() {
+      override def createPartitionReader: InputPartitionReader[InternalRow] = {
+        // I assume this runs on the exectuors
+        // new Nothing(tableName, props, schema)
+        null
+      }
+    })
   }
 }
