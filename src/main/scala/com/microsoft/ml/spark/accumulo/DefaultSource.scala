@@ -9,9 +9,8 @@ import org.apache.spark.sql.types.StructType
 
 class DefaultSource extends DataSourceV2 with ReadSupport {
 
-
   override def createReader(schema: StructType, options: DataSourceOptions): DataSourceReader = {
-    null
+    new AccumuloDataSourceReader(schema, options)
   }
 
   override def createReader(options: DataSourceOptions): DataSourceReader = {
