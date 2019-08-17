@@ -1,10 +1,7 @@
-
 // Copyright (C) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See LICENSE in project root for information.
 
 package com.microsoft.ml.spark.accumulo
-
-import java.io.IOException
 
 import org.apache.accumulo.core.client.IteratorSetting
 import org.apache.accumulo.core.clientImpl.{ClientContext, ScannerImpl, Tables}
@@ -29,7 +26,7 @@ case class SchemaMapping(rowKeyTargetColumn: String, mapping: Map[String, Schema
 
 @SerialVersionUID(1L)
 object AccumuloInputPartitionReader {
-  private def catalystSchemaToJson(schema: StructType) = {
+  def catalystSchemaToJson(schema: StructType): String = {
 
     val mappingFields = schema.fields.map(field => field.name -> SchemaMappingField(
       field.metadata.getString("cf"),
@@ -46,11 +43,11 @@ object AccumuloInputPartitionReader {
     }
   }
 
-  private def catalystSchemaToAvroSchema(schema: StructType) = {
+  def catalystSchemaToAvroSchema(schema: StructType): Schema = {
     // compile-time method binding. yes it's deprecated. yes it's the only version
     // available in the spark version deployed
     val avroFields = schema.fields.map(field =>
-      new Schema.Field( //TODO Fix deprecation
+      new Schema.Field(
         field.name,
         Schema.create(catalystToAvroType(field.dataType)),
         null.asInstanceOf[String],
@@ -59,7 +56,7 @@ object AccumuloInputPartitionReader {
     Schema.createRecord(JavaConversions.seqAsJavaList(avroFields))
   }
 
-  private def catalystToAvroType(dataType: DataType): Schema.Type =
+  def catalystToAvroType(dataType: DataType): Schema.Type =
     dataType match {
       case DataTypes.StringType => Schema.Type.STRING
       case DataTypes.IntegerType => Schema.Type.INT
@@ -72,26 +69,26 @@ object AccumuloInputPartitionReader {
 }
 
 @SerialVersionUID(1L)
-class AccumuloInputPartitionReader(val tableName: String,
-                                   val props: Map[String, String],
-                                   val schema: StructType)
+class AccumuloInputPartitionReader(
+                                    val tableName: String,
+                                    val properties: java.util.Properties,
+                                    val schema: StructType)
   extends InputPartitionReader[InternalRow] with Serializable {
+
+  // TODO: pull this from properties?
+  final val priority = 20
+
   private val authorizations = new Authorizations()
-
-  private val properties = new java.util.Properties()
-  properties.putAll(JavaConversions.mapAsJavaMap(props))
-
   private val client = new ClientContext(properties)
-
   private val tableId = Tables.getTableId(client, tableName)
-
   private val scanner = new ScannerImpl(client, tableId, authorizations)
 
-  // TODO: replace 20 (the priority with something...)
-  private val avroIterator = new IteratorSetting(20, "AVRO",
+  private val avroIterator = new IteratorSetting(
+    priority,
+    "AVRO",
     "org.apache.accumulo.spark.AvroRowEncoderIterator")
 
-  private val json: String = AccumuloInputPartitionReader.catalystSchemaToJson(schema)
+  private val json = AccumuloInputPartitionReader.catalystSchemaToJson(schema)
 
   // TODO: support additional user-supplied iterators
   avroIterator.addOption("schema", json)
@@ -99,42 +96,32 @@ class AccumuloInputPartitionReader(val tableName: String,
 
   // TODO: ?
   // scanner.setRange(baseSplit.getRange());
-  private val scannerIterator = scanner.iterator
+  private val scannerIterator = scanner.iterator()
 
   private val avroSchema = AccumuloInputPartitionReader.catalystSchemaToAvroSchema(schema)
   private val deserializer = new AvroDeserializer(avroSchema, schema)
   private val reader = new SpecificDatumReader[GenericRecord](avroSchema)
 
-  var row: InternalRow = _
-
-  @throws[IOException]
-  override def close(): Unit = {
+  def close(): Unit = {
     if (scanner != null)
       scanner.close()
   }
 
-  @throws[IOException]
-  override def next: Boolean = {
-    if (!scannerIterator.hasNext){
-      false
-    } else {
-      val entry = scannerIterator.next
-      // TODO: handle key
-      // key.set(currentKey = entry.getKey());
+  def next: Boolean = scannerIterator.hasNext
 
-      val data = entry.getValue.get
+  def get: InternalRow = {
+    val entry = scannerIterator.next
+    // TODO: handle key
+    // key.set(currentKey = entry.getKey());
 
-      // byte[] -> avro
-      val decoder = DecoderFactory.get.binaryDecoder(data, null)
-      val avroRecord = new GenericData.Record(avroSchema)
-      reader.read(avroRecord, decoder)
+    val data = entry.getValue.get
 
-      // avro to catalyst
-      row = deserializer.deserialize(avroRecord).asInstanceOf[InternalRow]
+    // byte[] -> avro
+    val decoder = DecoderFactory.get.binaryDecoder(data, null)
+    val avroRecord = new GenericData.Record(avroSchema)
+    reader.read(avroRecord, decoder)
 
-      true
-    }
+    // avro to catalyst
+    deserializer.deserialize(avroRecord).asInstanceOf[InternalRow]
   }
-
-  override def get: InternalRow = row
 }
