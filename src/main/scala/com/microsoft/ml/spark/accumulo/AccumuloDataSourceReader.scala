@@ -9,6 +9,8 @@ import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader.{DataSourceReader, InputPartition, InputPartitionReader}
 import org.apache.spark.sql.types.StructType
 
+import scala.collection.JavaConverters._
+
 @SerialVersionUID(1L)
 class AccumuloDataSourceReader(val schema: StructType, options: DataSourceOptions)
   extends DataSourceReader with Serializable {
@@ -20,19 +22,14 @@ class AccumuloDataSourceReader(val schema: StructType, options: DataSourceOption
 
   def planInputPartitions: java.util.List[InputPartition[InternalRow]] = {
     val tableName = options.tableName.get
-    val props = options.asMap()
     val properties = new java.util.Properties()
-    properties.putAll(props)
+    properties.putAll(options.asMap())
 
     // match partitions to accumulo tabletservers for given table
     val client = new ClientContext(properties)
-    val numTablets = client.tableOperations().listSplits(tableName, maxPartitions).size() + 1
+    val numTablets = client.tableOperations().listSplits(tableName, maxPartitions).size()
 
-    val partitionReaderFactories = new java.util.ArrayList[InputPartition[InternalRow]]
-    for (_ <- 0 until numTablets) {
-      partitionReaderFactories.add(new PartitionReaderFactory(tableName, properties, schema))
-    }
-    partitionReaderFactories
+    (0 to numTablets).map(_ => new PartitionReaderFactory(tableName, properties, schema)).asJava
   }
 }
 
