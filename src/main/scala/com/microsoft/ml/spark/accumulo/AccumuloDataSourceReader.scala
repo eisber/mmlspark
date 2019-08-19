@@ -16,7 +16,7 @@ class AccumuloDataSourceReader(val schema: StructType, options: DataSourceOption
   extends DataSourceReader with Serializable {
 
   // TODO: get this from somewhere?
-  val maxPartitions = 100
+  val maxPartitions = 1000
 
   def readSchema: StructType = schema
 
@@ -25,11 +25,14 @@ class AccumuloDataSourceReader(val schema: StructType, options: DataSourceOption
     val properties = new java.util.Properties()
     properties.putAll(options.asMap())
 
-    // match partitions to accumulo tabletservers for given table
     val client = new ClientContext(properties)
-    val numTablets = client.tableOperations().listSplits(tableName, maxPartitions).size()
+    val numSplits = client.tableOperations().listSplits(tableName, maxPartitions).size()
 
-    (0 to numTablets).map(_ => new PartitionReaderFactory(tableName, properties, schema)).asJava
+    // match partitions to accumulo tabletservers (numSplits + 1) for given table
+    new java.util.ArrayList[InputPartition[InternalRow]](
+    (0 to numSplits)
+      .map(_ => new PartitionReaderFactory(tableName, properties, schema))
+      .asJava)
   }
 }
 
