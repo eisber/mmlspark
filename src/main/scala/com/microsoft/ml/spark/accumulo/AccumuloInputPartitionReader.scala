@@ -14,8 +14,8 @@ import org.apache.spark.sql.avro.AvroDeserializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.reader.InputPartitionReader
 import org.apache.spark.sql.types.{DataType, DataTypes, StructType}
-import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
-import org.apache.log4j.Logger
+import org.codehaus.jackson.JsonNode
+import com.fasterxml.jackson.databind.ObjectMapper
 
 import scala.collection.JavaConversions
 
@@ -76,7 +76,6 @@ class AccumuloInputPartitionReader(val tableName: String,
 
   // TODO: pull this from properties?
   final val priority = 20
-  lazy val logger: Logger = Logger.getLogger(this.getClass.getName)
 
   private val authorizations = new Authorizations()
   private val client = new ClientContext(properties)
@@ -89,7 +88,6 @@ class AccumuloInputPartitionReader(val tableName: String,
     "org.apache.accumulo.spark.AvroRowEncoderIterator")
 
   private val json = AccumuloInputPartitionReader.catalystSchemaToJson(schema)
-  logger.info(s"Schema JSON: $json")
 
   // TODO: support additional user-supplied iterators
   avroIterator.addOption("schema", json)
