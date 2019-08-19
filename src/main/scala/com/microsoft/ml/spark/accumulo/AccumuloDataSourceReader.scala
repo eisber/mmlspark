@@ -3,9 +3,7 @@
 
 package com.microsoft.ml.spark.accumulo
 
-import org.apache.accumulo.core.clientImpl.{ClientContext, Tables}
-import org.apache.accumulo.core.dataImpl.KeyExtent
-import org.apache.accumulo.core.metadata.MetadataServicer
+import org.apache.accumulo.core.clientImpl.ClientContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader.{DataSourceReader, InputPartition, InputPartitionReader}
@@ -15,6 +13,9 @@ import org.apache.spark.sql.types.StructType
 class AccumuloDataSourceReader(val schema: StructType, options: DataSourceOptions)
   extends DataSourceReader with Serializable {
 
+  // TODO: get this from somewhere?
+  val maxPartitions = 100
+
   def readSchema: StructType = schema
 
   def planInputPartitions: java.util.List[InputPartition[InternalRow]] = {
@@ -23,15 +24,12 @@ class AccumuloDataSourceReader(val schema: StructType, options: DataSourceOption
     val properties = new java.util.Properties()
     properties.putAll(props)
 
-    // get map of accumulo tabletservers for given table
+    // match partitions to accumulo tabletservers for given table
     val client = new ClientContext(properties)
-    val tableId = Tables.getTableId(client, tableName)
-    val tabletLocations = new java.util.TreeMap[KeyExtent, String]()
-    // based on org/apache/accumulo/test/performance/scan/CollectTabletStats.java
-    MetadataServicer.forTableId(client, tableId).getTabletLocations(tabletLocations)
+    val numTablets = client.tableOperations().listSplits(tableName, maxPartitions).size() + 1
 
     val partitionReaderFactories = new java.util.ArrayList[InputPartition[InternalRow]]
-    for (_ <- 0 until tabletLocations.size()) {
+    for (_ <- 0 until numTablets) {
       partitionReaderFactories.add(new PartitionReaderFactory(tableName, properties, schema))
     }
     partitionReaderFactories
