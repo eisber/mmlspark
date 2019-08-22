@@ -14,12 +14,9 @@ import org.apache.spark.sql.avro.AvroDeserializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.reader.InputPartitionReader
 import org.apache.spark.sql.types.{DataType, DataTypes, StringType, StructField, StructType}
-import org.codehaus.jackson.JsonNode
 import org.codehaus.jackson.map.ObjectMapper
-import org.codehaus.jackson.node.NullNode
 
 import scala.beans.BeanProperty
-import scala.collection.JavaConversions
 
 // keeping the property names short to not hit any limits
 case class SchemaMappingField(
@@ -130,40 +127,6 @@ object AccumuloInputPartitionReader {
     }
       .endRecord()
   }
-//
-//  def catalystSchemaToAvroSchema(schema: StructType, onlyStructs: Boolean = false): java.util.List[Schema.Field] = {
-//    // compile-time method binding for Schema.create. yes it's deprecated. yes it's the only version
-//    // available in the spark version deployed
-//
-//    val avroFields = schema.fields.map(field => {
-//      val avroField = field.dataType match {
-//        case cft: StructType =>
-//          Schema.createRecord(catalystSchemaToAvroSchema(cft))
-//        case other =>
-//          Schema.create(field.dataType match {
-//            case DataTypes.StringType => Schema.Type.STRING
-//            case DataTypes.IntegerType => Schema.Type.INT
-//            case DataTypes.FloatType => Schema.Type.FLOAT
-//            case DataTypes.DoubleType => Schema.Type.DOUBLE
-//            case DataTypes.BooleanType => Schema.Type.BOOLEAN
-//            case DataTypes.LongType => Schema.Type.LONG
-//            case other => throw new UnsupportedOperationException(s"Unsupported type: $field.dataType")
-//          })
-//      }
-//
-//      new Schema.Field(
-//        field.name,
-//        avroField,
-//        null.asInstanceOf[String],
-//        // all fields are nullable for now...
-//        null,
-//        Schema.Field.Order.IGNORE
-//      )
-//    })
-//        .filter(f => !onlyStructs || f.schema().getType().equals(Schema.Type.RECORD))
-//
-//    JavaConversions.seqAsJavaList[Schema.Field](avroFields)
-//  }
 }
 
 @SerialVersionUID(1L)
@@ -195,7 +158,6 @@ class AccumuloInputPartitionReader(val tableName: String,
   // scanner.setRange(baseSplit.getRange());
   private val scannerIterator = scanner.iterator()
 
-  // private val avroSchema = Schema.createRecord(AccumuloInputPartitionReader.catalystSchemaToAvroSchema(schema, true))
   private val avroSchema = AccumuloInputPartitionReader.catalystSchemaToAvroSchema(schema)
   private val deserializer = new AvroDeserializer(avroSchema, schema)
   private val reader = new SpecificDatumReader[GenericRecord](avroSchema)
@@ -209,8 +171,6 @@ class AccumuloInputPartitionReader(val tableName: String,
 
   def get: InternalRow = {
     val entry = scannerIterator.next
-    // TODO: handle key
-    // key.set(currentKey = entry.getKey());
 
     val data = entry.getValue.get
 
@@ -221,5 +181,10 @@ class AccumuloInputPartitionReader(val tableName: String,
 
     // avro to catalyst
     deserializer.deserialize(avroRecord).asInstanceOf[InternalRow]
+
+    // TODO: pass row key
+    // x: InternalRow
+    // x.update(FieldIndex..
+    // key.set(currentKey = entry.getKey());
   }
 }
