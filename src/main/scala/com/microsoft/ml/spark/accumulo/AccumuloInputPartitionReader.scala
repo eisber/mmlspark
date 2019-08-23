@@ -4,6 +4,9 @@
 package com.microsoft.ml.spark.accumulo
 
 import org.apache.accumulo.core.client.IteratorSetting
+import org.apache.accumulo.core.client.Accumulo
+import org.apache.accumulo.core.data.Range
+import org.apache.accumulo.core.client.AccumuloClient
 import org.apache.accumulo.core.clientImpl.{ClientContext, ScannerImpl, Tables}
 import org.apache.accumulo.core.security.Authorizations
 import org.apache.avro.{Schema, SchemaBuilder}
@@ -15,6 +18,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.reader.InputPartitionReader
 import org.apache.spark.sql.types.{DataType, DataTypes, StringType, StructField, StructType}
 import org.codehaus.jackson.map.ObjectMapper
+import java.util.Collections
 
 import scala.beans.BeanProperty
 
@@ -139,9 +143,14 @@ class AccumuloInputPartitionReader(val tableName: String,
   final val priority = 20
 
   private val authorizations = new Authorizations()
-  private val client = new ClientContext(properties)
-  private val tableId = Tables.getTableId(client, tableName)
-  private val scanner = new ScannerImpl(client, tableId, authorizations)
+  // private val client = new ClientContext(properties)
+
+  // TODO: understand the relationship between client and clientContext
+  private val client = Accumulo.newClient().from(properties).build()
+  // private val tableId = Tables.getTableId(client, tableName)
+  // private val scanner = new ScannerImpl(client, tableId, authorizations)
+  // TODO: numThreads
+  private val scanner = client.createBatchScanner(tableName, authorizations, 1)
 
   private val avroIterator = new IteratorSetting(
     priority,
@@ -154,8 +163,9 @@ class AccumuloInputPartitionReader(val tableName: String,
   avroIterator.addOption("schema", json)
   scanner.addScanIterator(avroIterator)
 
-  // TODO: ?
-  // scanner.setRange(baseSplit.getRange());
+  // TODO: this needs to be determined by splits
+  // See https://github.com/apache/accumulo/blob/master/core/src/main/java/org/apache/accumulo/core/client/BatchScanner.java
+  scanner.setRanges(Collections.singletonList(new Range()));
   private val scannerIterator = scanner.iterator()
 
   private val avroSchema = AccumuloInputPartitionReader.catalystSchemaToAvroSchema(schema)
