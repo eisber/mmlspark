@@ -3,11 +3,11 @@
 
 package com.microsoft.ml.spark.accumulo
 
+import java.io.IOException
+
 import org.apache.accumulo.core.client.IteratorSetting
 import org.apache.accumulo.core.client.Accumulo
 import org.apache.accumulo.core.data.Range
-import org.apache.accumulo.core.client.AccumuloClient
-import org.apache.accumulo.core.clientImpl.{ClientContext, ScannerImpl, Tables}
 import org.apache.accumulo.core.security.Authorizations
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.{GenericData, GenericRecord}
@@ -16,7 +16,7 @@ import org.apache.avro.specific.SpecificDatumReader
 import org.apache.spark.sql.avro.AvroDeserializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.reader.InputPartitionReader
-import org.apache.spark.sql.types.{DataType, DataTypes, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.codehaus.jackson.map.ObjectMapper
 import java.util.Collections
 
@@ -171,30 +171,36 @@ class AccumuloInputPartitionReader(val tableName: String,
   private val avroSchema = AccumuloInputPartitionReader.catalystSchemaToAvroSchema(schema)
   private val deserializer = new AvroDeserializer(avroSchema, schema)
   private val reader = new SpecificDatumReader[GenericRecord](avroSchema)
+  var row: InternalRow = _
 
-  def close(): Unit = {
+  override def close(): Unit = {
     if (scanner != null)
       scanner.close()
   }
 
-  def next: Boolean = scannerIterator.hasNext
+  @IOException
+  override def next: Boolean = {
+    if (scannerIterator.hasNext) {
+      val entry = scannerIterator.next
+      val data = entry.getValue.get
 
-  def get: InternalRow = {
-    val entry = scannerIterator.next
+      // byte[] -> avro
+      val decoder = DecoderFactory.get.binaryDecoder(data, null)
+      val avroRecord = new GenericData.Record(avroSchema)
+      reader.read(avroRecord, decoder)
 
-    val data = entry.getValue.get
+      // avro to catalyst
+      row = deserializer.deserialize(avroRecord).asInstanceOf[InternalRow]
+      // TODO: pass row key
+      // x: InternalRow
+      // x.update(FieldIndex..
+      // key.set(currentKey = entry.getKey());
 
-    // byte[] -> avro
-    val decoder = DecoderFactory.get.binaryDecoder(data, null)
-    val avroRecord = new GenericData.Record(avroSchema)
-    reader.read(avroRecord, decoder)
-
-    // avro to catalyst
-    deserializer.deserialize(avroRecord).asInstanceOf[InternalRow]
-
-    // TODO: pass row key
-    // x: InternalRow
-    // x.update(FieldIndex..
-    // key.set(currentKey = entry.getKey());
+      true
+    } else {
+      false
+    }
   }
+
+  override def get(): InternalRow = row
 }
