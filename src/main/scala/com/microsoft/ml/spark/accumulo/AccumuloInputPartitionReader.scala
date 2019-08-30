@@ -135,22 +135,25 @@ object AccumuloInputPartitionReader {
 
 @SerialVersionUID(1L)
 class AccumuloInputPartitionReader(val tableName: String,
+                                   val range: Range,
                                    val properties: java.util.Properties,
                                    val schema: StructType)
   extends InputPartitionReader[InternalRow] with Serializable {
 
   // TODO: pull this from properties?
-  final val priority = 20
+  final val priority = new Integer(properties.getProperty("priority", "20"))
+  final val numQueryThreads = new Integer(properties.getProperty("numQueryThreads", "4"))
 
   private val authorizations = new Authorizations()
   // private val client = new ClientContext(properties)
 
   // TODO: understand the relationship between client and clientContext
   private val client = Accumulo.newClient().from(properties).build()
+
   // private val tableId = Tables.getTableId(client, tableName)
   // private val scanner = new ScannerImpl(client, tableId, authorizations)
-  // TODO: numThreads
-  private val scanner = client.createBatchScanner(tableName, authorizations, 1)
+  private val scanner = client.createBatchScanner(tableName, authorizations, numQueryThreads)
+  scanner.setRanges(Collections.singletonList(range))
 
   private val avroIterator = new IteratorSetting(
     priority,
@@ -163,15 +166,13 @@ class AccumuloInputPartitionReader(val tableName: String,
   avroIterator.addOption("schema", json)
   scanner.addScanIterator(avroIterator)
 
-  // TODO: this needs to be determined by splits
-  // See https://github.com/apache/accumulo/blob/master/core/src/main/java/org/apache/accumulo/core/client/BatchScanner.java
-  scanner.setRanges(Collections.singletonList(new Range()));
   private val scannerIterator = scanner.iterator()
 
   private val avroSchema = AccumuloInputPartitionReader.catalystSchemaToAvroSchema(schema)
   private val deserializer = new AvroDeserializer(avroSchema, schema)
   private val reader = new SpecificDatumReader[GenericRecord](avroSchema)
-  var row: InternalRow = _
+
+  private var currentRow: InternalRow = _
 
   override def close(): Unit = {
     if (scanner != null)
@@ -190,7 +191,7 @@ class AccumuloInputPartitionReader(val tableName: String,
       reader.read(avroRecord, decoder)
 
       // avro to catalyst
-      row = deserializer.deserialize(avroRecord).asInstanceOf[InternalRow]
+      currentRow = deserializer.deserialize(avroRecord).asInstanceOf[InternalRow]
       // TODO: pass row key
       // x: InternalRow
       // x.update(FieldIndex..
@@ -202,5 +203,5 @@ class AccumuloInputPartitionReader(val tableName: String,
     }
   }
 
-  override def get(): InternalRow = row
+  override def get(): InternalRow = currentRow
 }
