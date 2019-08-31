@@ -3,9 +3,7 @@
 
 package com.microsoft.ml.spark.accumulo
 
-import java.util.Collections
 import org.apache.accumulo.core.client.Accumulo
-import org.apache.accumulo.core.data.Range
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader.{DataSourceReader, InputPartition, InputPartitionReader}
@@ -33,15 +31,16 @@ class AccumuloDataSourceReader(val schema: StructType, options: DataSourceOption
       client.tableOperations().listSplits(tableName, maxPartitions)
     }.get.asScala.toArray
 
-    var startRange: Text = null
-    var stopRange: Text = null
+    var start: Text = null
+    var stop: Text = null
     new java.util.ArrayList[InputPartition[InternalRow]](
       (0 to splits.size).map(i => {
-        startRange = if (i > 0) splits(i - 1) else null
-        stopRange = if (i < splits.size) splits(i) else null
+        start = if (i > 0) splits(i - 1) else null
+        stop = if (i < splits.size) splits(i) else null
         new PartitionReaderFactory(
           tableName,
-          new Range(startRange, false, stopRange, true),
+          start,
+          stop,
           properties,
           schema)
       }).asJava
@@ -49,9 +48,13 @@ class AccumuloDataSourceReader(val schema: StructType, options: DataSourceOption
   }
 }
 
-class PartitionReaderFactory(tableName: String, range: Range, properties: java.util.Properties, schema: StructType)
+class PartitionReaderFactory(tableName: String,
+                             start: Text,
+                             stop: Text,
+                             properties: java.util.Properties,
+                             schema: StructType)
   extends InputPartition[InternalRow] {
   def createPartitionReader: InputPartitionReader[InternalRow] = {
-    new AccumuloInputPartitionReader(tableName, range, properties, schema)
+    new AccumuloInputPartitionReader(tableName, start, stop, properties, schema)
   }
 }

@@ -20,6 +20,8 @@ import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.codehaus.jackson.map.ObjectMapper
 import java.util.Collections
 
+import org.apache.hadoop.io.Text
+
 import scala.beans.BeanProperty
 
 // keeping the property names short to not hit any limits
@@ -135,7 +137,8 @@ object AccumuloInputPartitionReader {
 
 @SerialVersionUID(1L)
 class AccumuloInputPartitionReader(val tableName: String,
-                                   val range: Range,
+                                   val start: Text,
+                                   val stop: Text,
                                    val properties: java.util.Properties,
                                    val schema: StructType)
   extends InputPartitionReader[InternalRow] with Serializable {
@@ -153,7 +156,7 @@ class AccumuloInputPartitionReader(val tableName: String,
   // private val tableId = Tables.getTableId(client, tableName)
   // private val scanner = new ScannerImpl(client, tableId, authorizations)
   private val scanner = client.createBatchScanner(tableName, authorizations, numQueryThreads)
-  scanner.setRanges(Collections.singletonList(range))
+  scanner.setRanges(Collections.singletonList(new Range(start, false, stop, true)))
 
   private val avroIterator = new IteratorSetting(
     priority,
