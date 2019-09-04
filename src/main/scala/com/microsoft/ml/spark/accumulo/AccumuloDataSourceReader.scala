@@ -14,14 +14,16 @@ import org.apache.hadoop.io.Text
 import scala.collection.JavaConverters._
 
 @SerialVersionUID(1L)
-class AccumuloDataSourceReader(val schema: StructType, options: DataSourceOptions)
+class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
   extends DataSourceReader with Serializable {
+
+  private val defaultMaxPartitions = 1000
 
   def readSchema: StructType = schema
 
   def planInputPartitions: java.util.List[InputPartition[InternalRow]] = {
     val tableName = options.tableName.get
-    val maxPartitions = options.getInt("maxPartitions", 1000)
+    val maxPartitions = options.getInt("maxPartitions", defaultMaxPartitions)
     val properties = new java.util.Properties()
     properties.putAll(options.asMap())
 
@@ -34,15 +36,15 @@ class AccumuloDataSourceReader(val schema: StructType, options: DataSourceOption
     var start: Text = null
     var stop: Text = null
     new java.util.ArrayList[InputPartition[InternalRow]](
-      (0 to splits.size).map(i => {
+      (0 to splits.length).map(i => {
         start = if (i > 0) splits(i - 1) else null
-        stop = if (i < splits.size) splits(i) else null
+        stop = if (i < splits.length) splits(i) else null
         new PartitionReaderFactory(
           tableName,
           start,
           stop,
-          properties,
-          schema)
+          schema,
+          properties)
       }).asJava
     )
   }
@@ -51,10 +53,10 @@ class AccumuloDataSourceReader(val schema: StructType, options: DataSourceOption
 class PartitionReaderFactory(tableName: String,
                              start: Text,
                              stop: Text,
-                             properties: java.util.Properties,
-                             schema: StructType)
+                             schema: StructType,
+                             properties: java.util.Properties)
   extends InputPartition[InternalRow] {
   def createPartitionReader: InputPartitionReader[InternalRow] = {
-    new AccumuloInputPartitionReader(tableName, start, stop, properties, schema)
+    new AccumuloInputPartitionReader(tableName, start, stop, schema, properties)
   }
 }
