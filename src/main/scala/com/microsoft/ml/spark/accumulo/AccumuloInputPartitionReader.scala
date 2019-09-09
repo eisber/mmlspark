@@ -58,8 +58,7 @@ class AccumuloInputPartitionReader(tableName: String,
 
   private val scannerIterator = scanner.iterator()
 
-  //private val avroSchema = AvroUtils.catalystSchemaToAvroSchema(schema)
-  private val avroSchema = new Schema.Parser().parse(json)
+  private val avroSchema = AvroUtils.catalystSchemaToAvroSchema(schema)
   private val deserializer = new AvroDeserializer(avroSchema, schema)
   private val reader = new SpecificDatumReader[GenericRecord](avroSchema)
 
