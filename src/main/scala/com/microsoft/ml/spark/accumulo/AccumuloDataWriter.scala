@@ -5,8 +5,7 @@ package com.microsoft.ml.spark.accumulo
 
 import org.apache.accumulo.core.client.BatchWriterConfig
 import org.apache.accumulo.core.clientImpl.{ClientContext, Tables, TabletServerBatchWriter}
-import org.apache.accumulo.core.data.{Mutation, Value}
-import org.apache.hadoop.io.Text
+import org.apache.accumulo.core.data.Mutation
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.DataSourceOptions
@@ -33,12 +32,12 @@ class AccumuloDataWriter(schema: StructType, mode: SaveMode, options: DataSource
             cf.dataType match {
                 case cft: StructType => cft.fields.foreach(cq => {
                     // TODO: put in row id
-                    val mutation = new Mutation()
-                    mutation.put(
-                        new Text(cf.name),
-                        new Text(cq.name),
-                        new Value(new Text(record.getString(i))))
-                    batchWriter.addMutation(tableId, mutation)
+                    batchWriter.addMutation(tableId,
+                        new Mutation()
+                        .at()
+                        .family(cf.name)
+                        .qualifier(cq.name)
+                        .put(record.getString(i)))
                     i += 1
                 })
             }
