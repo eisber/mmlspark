@@ -3,15 +3,10 @@
 
 package com.microsoft.ml.spark.accumulo
 
-import java.io.ByteArrayOutputStream
-
 import org.apache.accumulo.core.client.BatchWriterConfig
 import org.apache.accumulo.core.clientImpl.{ClientContext, Tables, TabletServerBatchWriter}
-import org.apache.accumulo.core.data.Mutation
-import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericData, GenericRecord}
-import org.apache.avro.io.{BinaryEncoder, EncoderFactory}
-import org.apache.avro.specific.SpecificDatumWriter
+import org.apache.accumulo.core.data.{Mutation, Value}
+import org.apache.hadoop.io.Text
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.DataSourceOptions
@@ -31,33 +26,28 @@ class AccumuloDataWriter(schema: StructType, mode: SaveMode, options: DataSource
     private val tableName = options.tableName.get
     private val tableId = Tables.getTableId(context, tableName)
 
-//    private val avroSchema = AvroUtils.catalystSchemaToAvroSchema(schema)
-    private val json = AvroUtils.catalystSchemaToJson(schema)
-    private val avroSchema = new Schema.Parser().parse(json)
-
-    private val datumWriter = new SpecificDatumWriter[GenericRecord](avroSchema)
-    private val binaryBuffer = new ByteArrayOutputStream
-    private var encoder: BinaryEncoder = _
-
     def write(record: InternalRow): Unit = {
-        encoder = EncoderFactory.get.binaryEncoder(binaryBuffer, encoder)
 
-        val data = new GenericData.Record(avroSchema)
-        // TODO: put values from record into data
-
-        // avro -> byte[]
-        datumWriter.write(data, encoder)
-        encoder.flush()
-        binaryBuffer.flush()
-
-        val mutation = new Mutation(binaryBuffer.toByteArray)
-        batchWriter.addMutation(tableId, mutation)
+        var i = 0
+        schema.fields.foreach(cf =>
+            cf.dataType match {
+                case cft: StructType => cft.fields.foreach(cq => {
+                    // TODO: put in row id
+                    val mutation = new Mutation()
+                    mutation.put(
+                        new Text(cf.name),
+                        new Text(cq.name),
+                        new Value(new Text(record.getString(i))))
+                    batchWriter.addMutation(tableId, mutation)
+                    i += 1
+                })
+            }
+        )
     }
 
     def commit(): WriterCommitMessage = {
         batchWriter.flush()
         batchWriter.close()
-
         WriteSucceeded
     }
 

@@ -29,8 +29,7 @@ object AvroUtils {
         case _ => None
         // case other => throw new IllegalArgumentException(s"Unsupported type: ${other}")
       }
-    )
-      .filter(p => p != None)
+    ).filter(p => p != None)
 
     try
       new ObjectMapper().writeValueAsString(selectedFields)

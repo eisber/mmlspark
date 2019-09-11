@@ -18,8 +18,6 @@ import org.apache.spark.sql.types.StructType
 import java.io.IOException
 import java.util.Collections
 
-import org.apache.avro.Schema
-
 @SerialVersionUID(1L)
 class AccumuloInputPartitionReader(tableName: String,
                                    start: Text,
@@ -29,18 +27,13 @@ class AccumuloInputPartitionReader(tableName: String,
   extends InputPartitionReader[InternalRow] with Serializable {
 
   val defaultPriority = "20"
-  val defaultNumQueryThreads = "4"
+  val defaultNumQueryThreads = "1"
 
   val priority = new Integer(properties.getProperty("priority", defaultPriority))
+  // this parameter is impacted by number of accumulo splits and spark partitions and executors
   val numQueryThreads = new Integer(properties.getProperty("numQueryThreads", defaultNumQueryThreads))
 
   private val authorizations = new Authorizations()
-
-  // TODO: understand the relationship between client and clientContext
-  // private val client = new ClientContext(properties)
-  // private val tableId = Tables.getTableId(client, tableName)
-  // private val scanner = new ScannerImpl(client, tableId, authorizations)
-
   private val client = Accumulo.newClient().from(properties).build()
   private val scanner = client.createBatchScanner(tableName, authorizations, numQueryThreads)
   scanner.setRanges(Collections.singletonList(new Range(start, false, stop, true)))
@@ -81,7 +74,7 @@ class AccumuloInputPartitionReader(tableName: String,
       decoder = DecoderFactory.get.binaryDecoder(data, decoder)
       datum = reader.read(datum, decoder)
 
-      // avro to catalyst
+      // avro -> catalyst
       currentRow = deserializer.deserialize(datum).asInstanceOf[InternalRow]
       // TODO: pass row key
       // x: InternalRow
