@@ -36,7 +36,10 @@ class AccumuloInputPartitionReader(tableName: String,
   private val authorizations = new Authorizations()
   private val client = Accumulo.newClient().from(properties).build()
   private val scanner = client.createBatchScanner(tableName, authorizations, numQueryThreads)
-  scanner.setRanges(Collections.singletonList(new Range(new Text(start), false, new Text(stop), true)))
+
+  val startRange = if (start == null) null else new Text(start)
+  val stopRange = if (stop == null) null else new Text(stop)
+  scanner.setRanges(Collections.singletonList(new Range(startRange, false, stopRange, true)))
 
   private val avroIterator = new IteratorSetting(
     priority,
