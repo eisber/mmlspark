@@ -6,12 +6,10 @@ package com.microsoft.ml.spark.accumulo
 import java.io.ByteArrayOutputStream
 
 import com.microsoft.ml.spark.core.test.base.TestBase
-import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericData, GenericRecord, GenericRecordBuilder}
+import org.apache.avro.generic.{GenericRecord, GenericRecordBuilder}
 import org.apache.avro.io.EncoderFactory
 import org.apache.avro.specific.SpecificDatumWriter
 import org.apache.spark.sql.types.{DataTypes, StructField, StructType}
-
 
 class VerifyAccumuloSchema extends TestBase {
   test("Validate catalyst schema to json serialization") {
@@ -26,7 +24,7 @@ class VerifyAccumuloSchema extends TestBase {
         , true))
       .add("rowKey", DataTypes.StringType, false)
 
-    val jsonActual = AccumuloInputPartitionReader.catalystSchemaToJson(schema)
+    val jsonActual = AvroUtils.catalystSchemaToJson(schema)
     val jsonExpected = "[{\"cf\":\"cf1\",\"cq\":\"cq1\",\"t\":\"STRING\"}" +
       ",{\"cf\":\"cf1\",\"cq\":\"cq2\",\"t\":\"DOUBLE\"}" +
       ",{\"cf\":\"cf2\",\"cq\":\"cq_a\",\"t\":\"INTEGER\"}" +
@@ -49,7 +47,7 @@ class VerifyAccumuloSchema extends TestBase {
         , true))
       .add("rowKey", DataTypes.StringType, false)
 
-    val avroSchema = AccumuloInputPartitionReader.catalystSchemaToAvroSchema(schema)
+    val avroSchema = AvroUtils.catalystSchemaToAvroSchema(schema)
 
     val builder = new GenericRecordBuilder(avroSchema)
 
@@ -83,4 +81,3 @@ class VerifyAccumuloSchema extends TestBase {
     assert(jsonOutput.equals(jsonExpected))
   }
 }
-

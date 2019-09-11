@@ -29,7 +29,8 @@ object AvroUtils {
         case _ => None
         // case other => throw new IllegalArgumentException(s"Unsupported type: ${other}")
       }
-    ).filter(p => p != None)
+    )
+      .filter(p => p != None)
 
     try
       new ObjectMapper().writeValueAsString(selectedFields)
@@ -42,51 +43,23 @@ object AvroUtils {
   implicit class CatalystSchemaToAvroRecordBuilder(builder: SchemaBuilder.FieldAssembler[Schema]) {
     def addAvroRecordFields(schema: StructType): SchemaBuilder.FieldAssembler[Schema] = {
       schema.fields.foldLeft(builder) { (builder, field) =>
-        field.dataType match {
-          case DataTypes.StringType =>
-            if (field.nullable)
-              builder.optionalString(field.name)
-            else
-              builder.requiredString(field.name)
-
-          case DataTypes.IntegerType =>
-            if (field.nullable)
-              builder.optionalInt(field.name)
-            else
-              builder.requiredInt(field.name)
-
-          case DataTypes.FloatType =>
-            if (field.nullable)
-              builder.optionalFloat(field.name)
-            else
-              builder.requiredFloat(field.name)
-
-          case DataTypes.DoubleType =>
-            if (field.nullable)
-              builder.optionalDouble(field.name)
-            else
-              builder.requiredDouble(field.name)
-
-          case DataTypes.BooleanType =>
-            if (field.nullable)
-              builder.optionalBoolean(field.name)
-            else
-              builder.requiredBoolean(field.name)
-
-          case DataTypes.LongType =>
-            if (field.nullable)
-              builder.optionalLong(field.name)
-            else
-              builder.requiredLong(field.name)
-
-          case DataTypes.BinaryType =>
-            if (field.nullable)
-              builder.optionalBytes(field.name)
-            else
-              builder.requiredBytes(field.name)
-
-          // TODO: date/time support?
-          case _ => throw new UnsupportedOperationException(s"Unsupported type: $field.dataType")
+          (field.dataType, field.nullable) match {
+            case (DataTypes.BinaryType, true) => builder.optionalBytes(field.name)
+            case (DataTypes.BinaryType, false) => builder.requiredBytes(field.name)
+            case (DataTypes.BooleanType, true) => builder.optionalBoolean(field.name)
+            case (DataTypes.BooleanType, false) => builder.requiredBoolean(field.name)
+            case (DataTypes.DoubleType, true) => builder.optionalDouble(field.name)
+            case (DataTypes.DoubleType, false) => builder.requiredDouble(field.name)
+            case (DataTypes.FloatType, true) => builder.optionalFloat(field.name)
+            case (DataTypes.FloatType, false) => builder.requiredFloat(field.name)
+            case (DataTypes.IntegerType, true) => builder.optionalInt(field.name)
+            case (DataTypes.IntegerType, false) => builder.requiredInt(field.name)
+            case (DataTypes.LongType, true) => builder.optionalLong(field.name)
+            case (DataTypes.LongType, false) => builder.requiredLong(field.name)
+            case (DataTypes.StringType, true) => builder.optionalString(field.name)
+            case (DataTypes.StringType, false) => builder.requiredString(field.name)
+            // TODO: date/time support?
+            case _ => throw new UnsupportedOperationException(s"Unsupported type: $field.dataType")
         }
       }
     }
