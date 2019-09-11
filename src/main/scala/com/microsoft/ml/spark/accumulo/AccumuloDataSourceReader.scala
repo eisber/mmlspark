@@ -3,6 +3,7 @@
 
 package com.microsoft.ml.spark.accumulo
 
+import com.microsoft.ml.spark.core.env.StreamUtilities
 import org.apache.accumulo.core.client.Accumulo
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.DataSourceOptions
@@ -26,13 +27,15 @@ class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
     val properties = new java.util.Properties()
     properties.putAll(options.asMap())
 
-    val client = Accumulo.newClient().from(properties).build()
-    // match partitions to accumulo tabletservers (numSplits + 1) for a given table up to maxPartitions
-    val splits = client.tableOperations().listSplits(tableName, maxPartitions).asScala.toArray
-    client.close()
+    var splits = StreamUtilities.using(Accumulo.newClient().from(properties).build()) { client =>
+      client.tableOperations().listSplits(tableName, maxPartitions)
+    }.get.asScala.toArray
+
+    if (splits.length == 0)
+      splits = Array(null)
 
     new java.util.ArrayList[InputPartition[InternalRow]](
-      splits.indices.map((i: Int) =>
+      (0 until splits.length).map((i: Int) =>
         i match {
           case 0 => new PartitionReaderFactory(tableName, null, splits(i), schema, properties)
           case _ => new PartitionReaderFactory(tableName, splits(i - 1), splits(i), schema, properties)
