@@ -20,8 +20,8 @@ import java.util.Collections
 
 @SerialVersionUID(1L)
 class AccumuloInputPartitionReader(tableName: String,
-                                   start: Text,
-                                   stop: Text,
+                                   start: Array[Byte],
+                                   stop: Array[Byte],
                                    schema: StructType,
                                    properties: java.util.Properties)
   extends InputPartitionReader[InternalRow] with Serializable {
@@ -36,7 +36,7 @@ class AccumuloInputPartitionReader(tableName: String,
   private val authorizations = new Authorizations()
   private val client = Accumulo.newClient().from(properties).build()
   private val scanner = client.createBatchScanner(tableName, authorizations, numQueryThreads)
-  scanner.setRanges(Collections.singletonList(new Range(start, false, stop, true)))
+  scanner.setRanges(Collections.singletonList(new Range(new Text(start), false, new Text(stop), true)))
 
   private val avroIterator = new IteratorSetting(
     priority,

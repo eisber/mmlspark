@@ -29,7 +29,7 @@ class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
 
     var splits = StreamUtilities.using(Accumulo.newClient().from(properties).build()) { client =>
       client.tableOperations().listSplits(tableName, maxPartitions)
-    }.get.asScala.toArray
+    }.get.asScala.map(_.getBytes).toArray
 
     if (splits.length == 0)
       splits = Array(null)
@@ -46,8 +46,8 @@ class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
 }
 
 class PartitionReaderFactory(tableName: String,
-                             start: Text,
-                             stop: Text,
+                             start: Array[Byte],
+                             stop: Array[Byte],
                              schema: StructType,
                              properties: java.util.Properties)
   extends InputPartition[InternalRow] {
