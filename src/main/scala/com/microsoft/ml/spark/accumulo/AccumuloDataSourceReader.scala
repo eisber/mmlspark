@@ -39,7 +39,7 @@ class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
     )
 
     new java.util.ArrayList[InputPartition[InternalRow]] {
-      (1 to splits.length).map(i =>
+      (1 until splits.length).map(i =>
         new PartitionReaderFactory(tableName, splits(i - 1), splits(i), schema, properties)
       ).asJava
     }
