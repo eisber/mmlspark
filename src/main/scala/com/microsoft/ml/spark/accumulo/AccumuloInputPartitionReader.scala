@@ -5,7 +5,7 @@ package com.microsoft.ml.spark.accumulo
 
 import org.apache.accumulo.core.client.IteratorSetting
 import org.apache.accumulo.core.client.Accumulo
-import org.apache.accumulo.core.data.Range
+import org.apache.accumulo.core.data.{Key, Range}
 import org.apache.accumulo.core.security.Authorizations
 import org.apache.avro.generic.GenericRecord
 import org.apache.avro.io.{BinaryDecoder, DecoderFactory}
@@ -36,10 +36,9 @@ class AccumuloInputPartitionReader(tableName: String,
   private val authorizations = new Authorizations()
   private val client = Accumulo.newClient().from(properties).build()
   private val scanner = client.createBatchScanner(tableName, authorizations, numQueryThreads)
-
-  val startRange = if (start == null) null else new Text(start)
-  val stopRange = if (stop == null) null else new Text(stop)
-  scanner.setRanges(Collections.singletonList(new Range(startRange, false, stopRange, true)))
+  scanner.setRanges(Collections.singletonList(
+    new Range(new Key(start), false, new Key(stop), true))
+  )
 
   private val avroIterator = new IteratorSetting(
     priority,

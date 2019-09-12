@@ -12,36 +12,37 @@ import org.apache.spark.sql.types.StructType
 import org.apache.hadoop.io.Text
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 @SerialVersionUID(1L)
 class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
   extends DataSourceReader with Serializable {
 
-  private val defaultMaxPartitions = 1000
+  private val defaultMaxPartitions = 200
 
   def readSchema: StructType = schema
 
   def planInputPartitions: java.util.List[InputPartition[InternalRow]] = {
     val tableName = options.tableName.get
-    val maxPartitions = options.getInt("maxPartitions", defaultMaxPartitions)
+    val maxPartitions = options.getInt("maxPartitions", defaultMaxPartitions) - 1
     val properties = new java.util.Properties()
     properties.putAll(options.asMap())
 
-    var splits = StreamUtilities.using(Accumulo.newClient().from(properties).build()) { client =>
-      client.tableOperations().listSplits(tableName, maxPartitions)
-    }.get.asScala.map(_.getBytes).toArray
-
-    if (splits.length == 0)
-      splits = Array(null)
-
-    new java.util.ArrayList[InputPartition[InternalRow]](
-      (0 until splits.length).map((i: Int) =>
-        i match {
-          case 0 => new PartitionReaderFactory(tableName, null, splits(i), schema, properties)
-          case _ => new PartitionReaderFactory(tableName, splits(i - 1), splits(i), schema, properties)
-        }
-      ).asJava
+    val splits = ArrayBuffer(new Text("-inf").getBytes, new Text("inf").getBytes)
+    splits.insertAll(1,
+      StreamUtilities.using(Accumulo.newClient().from(properties).build()) { client =>
+        client.tableOperations().listSplits(tableName, maxPartitions)
+      }
+        .get
+        .asScala
+        .map(_.getBytes)
     )
+
+    new java.util.ArrayList[InputPartition[InternalRow]] {
+      (1 to splits.length).map(i =>
+        new PartitionReaderFactory(tableName, splits(i - 1), splits(i), schema, properties)
+      ).asJava
+    }
   }
 }
 
