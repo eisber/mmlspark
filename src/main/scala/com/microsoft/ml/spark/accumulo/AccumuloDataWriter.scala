@@ -5,10 +5,11 @@ package com.microsoft.ml.spark.accumulo
 
 import org.apache.accumulo.core.client.Accumulo
 import org.apache.accumulo.core.data.Mutation
+import org.apache.hadoop.io.Text
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.writer.{DataWriter, WriterCommitMessage}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 
 class AccumuloDataWriter (tableName: String, schema: StructType, mode: SaveMode, properties: java.util.Properties)
   extends DataWriter[InternalRow] {
@@ -22,24 +23,23 @@ class AccumuloDataWriter (tableName: String, schema: StructType, mode: SaveMode,
     private val batchWriter = client.createBatchWriter(tableName)
 
     def write(record: InternalRow): Unit = {
-
-        var i = 0
-        var m = new Mutation()
-        schema.fields.foreach(cf =>
-            cf.dataType match {
-                case cft: StructType => cft.fields.foreach(cq => {
-                    // TODO: put in row id
-                    m = new Mutation()
-                      .at()
-                      .family(cf.name)
-                      .qualifier(cq.name)
-                      .put(record.getString(i))
-
-                    batchWriter.addMutation(m)
-                    i += 1
-                })
-            }
-        )
+        schema.fields.zipWithIndex.foreach {
+            case (cf: StructField, structIdx: Int) =>
+                cf.dataType match {
+                    case struct: StructType =>
+                        struct.fields.zipWithIndex.foreach {
+                            case (cq: StructField, fieldIdx: Int) =>
+                                val recordStruct = record.getStruct(structIdx, struct.size)
+                                // FIXME: put in correct row id
+                                batchWriter.addMutation(new Mutation(new Text("row_id"))
+                                  .at()
+                                  .family(cf.name)
+                                  .qualifier(cq.name)
+                                  .put(new Text(recordStruct.getString(fieldIdx)))
+                                )
+                        }
+                }
+        }
     }
 
     def commit(): WriterCommitMessage = {
