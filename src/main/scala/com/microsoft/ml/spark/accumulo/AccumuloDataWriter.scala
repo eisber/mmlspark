@@ -8,21 +8,16 @@ import org.apache.accumulo.core.clientImpl.{ClientContext, Tables, TabletServerB
 import org.apache.accumulo.core.data.Mutation
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.writer.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.types.StructType
 
-class AccumuloDataWriter(schema: StructType, mode: SaveMode, options: DataSourceOptions)
+class AccumuloDataWriter (tableName: String, schema: StructType, mode: SaveMode, properties: java.util.Properties)
   extends DataWriter[InternalRow] {
-
-    val properties = new java.util.Properties()
-    properties.putAll(options.asMap())
 
     val context = new ClientContext(properties)
     // TODO: construct BatchWriterConfig from properties if passed in
     val batchWriter = new TabletServerBatchWriter(context, new BatchWriterConfig)
 
-    private val tableName = options.tableName.get
     private val tableId = Tables.getTableId(context, tableName)
 
     def write(record: InternalRow): Unit = {

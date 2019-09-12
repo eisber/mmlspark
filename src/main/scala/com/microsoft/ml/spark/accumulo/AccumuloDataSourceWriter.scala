@@ -13,7 +13,11 @@ class AccumuloDataSourceWriter(schema: StructType, mode: SaveMode, options: Data
   extends DataSourceWriter {
 
   override def createWriterFactory(): DataWriterFactory[InternalRow] = {
-    new AccumuloDataWriterFactory(schema, mode, options)
+    val tableName = options.tableName.get
+    val properties = new java.util.Properties()
+    properties.putAll(options.asMap())
+
+    new AccumuloDataWriterFactory(tableName, schema, mode, properties)
   }
 
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
@@ -23,9 +27,9 @@ class AccumuloDataSourceWriter(schema: StructType, mode: SaveMode, options: Data
   }
 }
 
-class AccumuloDataWriterFactory(schema: StructType, mode: SaveMode, options: DataSourceOptions)
+class AccumuloDataWriterFactory(tableName: String, schema: StructType, mode: SaveMode, properties: java.util.Properties)
   extends DataWriterFactory[InternalRow] {
   override def createDataWriter(partitionId: Int, taskId: Long, epochId: Long): DataWriter[InternalRow] = {
-    new AccumuloDataWriter(schema, mode, options)
+    new AccumuloDataWriter(tableName, schema, mode, properties)
   }
 }
