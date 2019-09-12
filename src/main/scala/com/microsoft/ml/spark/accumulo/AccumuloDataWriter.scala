@@ -3,8 +3,7 @@
 
 package com.microsoft.ml.spark.accumulo
 
-import org.apache.accumulo.core.client.BatchWriterConfig
-import org.apache.accumulo.core.clientImpl.{ClientContext, Tables, TabletServerBatchWriter}
+import org.apache.accumulo.core.client.Accumulo
 import org.apache.accumulo.core.data.Mutation
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.InternalRow
@@ -14,11 +13,13 @@ import org.apache.spark.sql.types.StructType
 class AccumuloDataWriter (tableName: String, schema: StructType, mode: SaveMode, properties: java.util.Properties)
   extends DataWriter[InternalRow] {
 
-    val context = new ClientContext(properties)
+    // val context = new ClientContext(properties)
     // TODO: construct BatchWriterConfig from properties if passed in
-    val batchWriter = new TabletServerBatchWriter(context, new BatchWriterConfig)
+    // val batchWriter = new TabletServerBatchWriter(context, new BatchWriterConfig)
+    // private val tableId = Tables.getTableId(context, tableName)
 
-    private val tableId = Tables.getTableId(context, tableName)
+    private val client = Accumulo.newClient().from(properties).build();
+    private val batchWriter = client.createBatchWriter(tableName)
 
     def write(record: InternalRow): Unit = {
 
@@ -27,12 +28,13 @@ class AccumuloDataWriter (tableName: String, schema: StructType, mode: SaveMode,
             cf.dataType match {
                 case cft: StructType => cft.fields.foreach(cq => {
                     // TODO: put in row id
-                    batchWriter.addMutation(tableId,
-                        new Mutation()
-                        .at()
-                        .family(cf.name)
-                        .qualifier(cq.name)
-                        .put(record.getString(i)))
+                    val m = new Mutation()
+                      .at()
+                      .family(cf.name)
+                      .qualifier(cq.name)
+                      .put(record.getString(i))
+
+                    batchWriter.addMutation(m)
                     i += 1
                 })
             }
