@@ -10,7 +10,6 @@ import org.apache.accumulo.core.security.Authorizations
 import org.apache.avro.generic.GenericRecord
 import org.apache.avro.io.{BinaryDecoder, DecoderFactory}
 import org.apache.avro.specific.SpecificDatumReader
-import org.apache.hadoop.io.Text
 import org.apache.spark.sql.avro.AvroDeserializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.reader.InputPartitionReader
@@ -36,9 +35,9 @@ class AccumuloInputPartitionReader(tableName: String,
   private val authorizations = new Authorizations()
   private val client = Accumulo.newClient().from(properties).build()
   private val scanner = client.createBatchScanner(tableName, authorizations, numQueryThreads)
-  private val startKey = if (start.isEmpty) null else new Key(start)
-  private val stopKey = if (stop.isEmpty) null else new Key(stop)
-  scanner.setRanges(Collections.singletonList(new Range(startKey, false, stopKey, true)))
+  scanner.setRanges(Collections.singletonList(
+    new Range(new Key(start), false, new Key(stop), true))
+  )
 
   private val avroIterator = new IteratorSetting(
     priority,
