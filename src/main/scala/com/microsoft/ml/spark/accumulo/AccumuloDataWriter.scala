@@ -24,11 +24,12 @@ class AccumuloDataWriter (tableName: String, schema: StructType, mode: SaveMode,
     def write(record: InternalRow): Unit = {
 
         var i = 0
+        var m = new Mutation()
         schema.fields.foreach(cf =>
             cf.dataType match {
                 case cft: StructType => cft.fields.foreach(cq => {
                     // TODO: put in row id
-                    val m = new Mutation()
+                    m = new Mutation()
                       .at()
                       .family(cf.name)
                       .qualifier(cq.name)
