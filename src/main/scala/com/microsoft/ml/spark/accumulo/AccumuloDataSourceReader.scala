@@ -28,7 +28,7 @@ class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
     val properties = new java.util.Properties()
     properties.putAll(options.asMap())
 
-    val splits = ArrayBuffer(new Text("-inf").getBytes, new Text("inf").getBytes)
+    val splits = ArrayBuffer(Array[Byte](), Array[Byte]())
     splits.insertAll(1,
       StreamUtilities.using(Accumulo.newClient().from(properties).build()) { client =>
         client.tableOperations().listSplits(tableName, maxPartitions)
