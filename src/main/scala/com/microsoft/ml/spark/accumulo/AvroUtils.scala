@@ -28,8 +28,7 @@ object AvroUtils {
         // Skip unknown types (e.g. string for row key)
         case _ => None
         // case other => throw new IllegalArgumentException(s"Unsupported type: ${other}")
-      }
-    )
+      })
       .filter(p => p != None)
 
     try
@@ -70,22 +69,22 @@ object AvroUtils {
     val fieldBuilder = SchemaBuilder.record("root")
       .fields()
 
-    schema.fields.foldLeft(fieldBuilder) {  (builder, field) =>
-      field.dataType match {
-        case cft: StructType =>
-          // builder.record(field.name).fields().nullableBoolean().endRecord()
-          fieldBuilder
-            .name(field.name)
-            .`type`(SchemaBuilder
-              .record(field.name)
-              .fields
-              .addAvroRecordFields(cft)
-              .endRecord())
-            .noDefault()
-
-        case _ => builder // just skip top-level non-struct fields
+    schema.fields.foldLeft(fieldBuilder) { (builder, field) =>
+        field.dataType match {
+          case cft: StructType =>
+            // builder.record(field.name).fields().nullableBoolean().endRecord()
+            fieldBuilder
+              .name(field.name)
+              .`type`(SchemaBuilder
+                .record(field.name)
+                .fields
+                .addAvroRecordFields(cft)
+                .endRecord())
+              .noDefault()
+   
+          case _ => builder // just skip top-level non-struct fields
+        }
       }
-    }
       .endRecord()
   }
 }
