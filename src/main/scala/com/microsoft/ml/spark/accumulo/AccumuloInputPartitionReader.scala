@@ -25,7 +25,8 @@ class AccumuloInputPartitionReader(tableName: String,
                                    stop: Array[Byte],
                                    schema: StructType,
                                    properties: java.util.Properties,
-                                   rowKeyColumn: String)
+                                   rowKeyColumn: String,
+                                   filterInJuel: Option[String])
   extends InputPartitionReader[InternalRow] with Serializable {
 
   val defaultPriority = "20"
@@ -58,11 +59,16 @@ class AccumuloInputPartitionReader(tableName: String,
       -1
   }
 
+  // AVRO Iterator setup
   private val json = AvroUtils.catalystSchemaToJson(schemaWithoutRowKey)
 
-  // TODO: support additional user-supplied iterators
   avroIterator.addOption("schema", json)
+  if (filterInJuel.isDefined)
+    avroIterator.addOption("filter", filterInJuel.get)
+
   scanner.addScanIterator(avroIterator)
+
+  // TODO: support additional user-supplied iterators
 
   private val scannerIterator = scanner.iterator()
 

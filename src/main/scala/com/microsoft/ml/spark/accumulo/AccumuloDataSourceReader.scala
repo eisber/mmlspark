@@ -35,6 +35,8 @@ class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
   // needs to be nullable so that Avro doesn't barf when we want to add another column
   var requiredSchema = schema.add(rowKeyColumn, DataTypes.StringType, true)
 
+  var filterInJuel: Option[String] = None
+
   // SupportsPushDownRequiredColumns implementation
   override def pruneColumns(requiredSchema: StructType): Unit = {
       this.requiredSchema = requiredSchema
@@ -42,20 +44,13 @@ class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
 
   def readSchema: StructType = requiredSchema
 
-  // SupportsPushDownFilters 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
-    println("MARKUS PUSHFILTERS!!!!!!!!!!!")
-    println(filters)
-/*
-      // https://spark.apache.org/docs/2.1.1/api/java/org/apache/spark/sql/sources/Filter.html
-      val (supported, unsupported) = filters.partition {
-        case GreaterThan("i", _: Int) => true
-        case _ => false
-      }
-      this.filters = supported
-      unsupported
-*/
-    filters
+    val result = FilterToJuel.serializeFilters(filters)
+
+    this.filterInJuel = Some(result.serializedFilter)
+    this.filters = result.supportedFilters.toArray
+
+    result.unsupportedFilters.toArray
   }
 
   override def pushedFilters(): Array[Filter] = filters
@@ -79,7 +74,7 @@ class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
 
     new java.util.ArrayList[InputPartition[InternalRow]](
       (1 until splits.length).map(i =>
-        new PartitionReaderFactory(tableName, splits(i - 1), splits(i), requiredSchema, properties, rowKeyColumn)
+        new PartitionReaderFactory(tableName, splits(i - 1), splits(i), requiredSchema, properties, rowKeyColumn, filterInJuel)
       ).asJava
     )
   }
@@ -90,9 +85,10 @@ class PartitionReaderFactory(tableName: String,
                              stop: Array[Byte],
                              schema: StructType,
                              properties: java.util.Properties,
-                             rowKeyColumn: String)
+                             rowKeyColumn: String,
+                             filterInJuel: Option[String])
   extends InputPartition[InternalRow] {
   def createPartitionReader: InputPartitionReader[InternalRow] = {
-    new AccumuloInputPartitionReader(tableName, start, stop, schema, properties, rowKeyColumn)
+    new AccumuloInputPartitionReader(tableName, start, stop, schema, properties, rowKeyColumn, filterInJuel)
   }
 }
