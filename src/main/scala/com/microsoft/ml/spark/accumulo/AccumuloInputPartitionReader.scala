@@ -13,7 +13,7 @@ import org.apache.avro.specific.SpecificDatumReader
 import org.apache.spark.sql.avro.AvroDeserializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.reader.InputPartitionReader
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.apache.hadoop.io.Text
 import java.io.IOException
 import java.util.Collections
@@ -49,7 +49,14 @@ class AccumuloInputPartitionReader(tableName: String,
 
   // drop rowKey from schema
   private val schemaWithoutRowKey = new StructType(schema.fields.filter(_.name != rowKeyColumn))
-  private val rowKeyColumnIndex = schema.fieldIndex(rowKeyColumn)
+  private val schemaWithRowKey = schema
+
+  private val rowKeyColumnIndex = {
+    if (schema.fieldNames.contains(rowKeyColumn))
+      schema.fieldIndex(rowKeyColumn)
+    else
+      -1
+  }
 
   private val json = AvroUtils.catalystSchemaToJson(schemaWithoutRowKey)
 
@@ -62,7 +69,7 @@ class AccumuloInputPartitionReader(tableName: String,
 // filter out row-key target from schema generation
 // populate it
   private val avroSchema = AvroUtils.catalystSchemaToAvroSchema(schemaWithoutRowKey)
-  private val deserializer = new AvroDeserializer(avroSchema, schema)
+  private val deserializer = new AvroDeserializer(avroSchema, schemaWithRowKey)
   private val reader = new SpecificDatumReader[GenericRecord](avroSchema)
 
   private var decoder: BinaryDecoder = _
@@ -89,12 +96,14 @@ class AccumuloInputPartitionReader(tableName: String,
       // avro -> catalyst
       currentRow = deserializer.deserialize(datum).asInstanceOf[InternalRow]
 
-      // move row key id into internalrow
-      entry.getKey().getRow(rowKeyText)
+      if (rowKeyColumnIndex >= 0) {
+        // move row key id into internalrow
+        entry.getKey().getRow(rowKeyText)
 
-      // avoid yet another byte array copy...
-      val str = UTF8String.fromBytes(rowKeyText.getBytes, 0, rowKeyText.getLength)
-      currentRow.update(rowKeyColumnIndex, str)
+        // avoid yet another byte array copy...
+        val str = UTF8String.fromBytes(rowKeyText.getBytes, 0, rowKeyText.getLength)
+        currentRow.update(rowKeyColumnIndex, str)
+      }
 
       true
     } else {

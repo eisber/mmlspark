@@ -1,35 +1,41 @@
 package com.microsoft.ml.spark.accumulo
 
 import org.apache.avro.{Schema, SchemaBuilder}
-import org.apache.spark.sql.types.{DataTypes, StructType}
+import org.apache.spark.sql.types.{DataType, DataTypes, StructType}
 import org.codehaus.jackson.map.ObjectMapper
 
 import scala.beans.BeanProperty
 
 // keeping the property names short to not hit any limits
-case class SchemaMappingField(@BeanProperty val cf: String,
-                              @BeanProperty val cq: String,
-                              @BeanProperty val t: String)
+case class SchemaMappingField(@BeanProperty val cf: String, // column family
+                              @BeanProperty val cq: String, // column qualifier
+                              @BeanProperty val fvn: String, // filter variable name
+                              @BeanProperty val t: String) // type
 
 @SerialVersionUID(1L)
 object AvroUtils {
   def catalystSchemaToJson(schema: StructType): String = {
 
+    var i = 0
     val selectedFields = schema.fields.flatMap(cf =>
       cf.dataType match {
         case cft: StructType => cft.fields.map(cq =>
           SchemaMappingField(
             cf.name,
             cq.name,
+            { i += 1; s"v${i}" },
             // TODO: toUpperCase() is weird...
             cq.dataType.typeName.toUpperCase
           )
         )
-        // Skip unknown types (e.g. string for row key)
-        case _ => None
-        // case other => throw new IllegalArgumentException(s"Unsupported type: ${other}")
+        case _: DataType => Seq(SchemaMappingField(
+            cf.name,
+            null,
+            { i += 1; s"v${i}" },
+            // TODO: toUpperCase() is weird...
+            cf.dataType.typeName.toUpperCase
+          ))
       })
-      .filter(p => p != None)
 
     try
       new ObjectMapper().writeValueAsString(selectedFields)

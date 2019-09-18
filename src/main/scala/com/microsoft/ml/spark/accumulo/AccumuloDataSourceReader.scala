@@ -8,7 +8,14 @@ import org.apache.accumulo.core.client.Accumulo
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader.{DataSourceReader, InputPartition, InputPartitionReader}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataTypes, StructType}
+import org.apache.spark.sql.sources.{Filter, GreaterThan}
+
+// TODO: https://github.com/apache/spark/blob/053dd858d38e6107bc71e0aa3a4954291b74f8c8/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/SupportsReportPartitioning.java
+// in head of spark github repo
+// import org.apache.spark.sql.connector.read.{SupportsPushDownFilters, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.sources.v2.reader.{SupportsPushDownFilters, SupportsPushDownRequiredColumns}
+
 import org.apache.hadoop.io.Text
 
 import scala.collection.JavaConverters._
@@ -16,19 +23,45 @@ import scala.collection.mutable.ArrayBuffer
 
 @SerialVersionUID(1L)
 class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
-  extends DataSourceReader with Serializable {
+  extends DataSourceReader with Serializable with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
 
   private val defaultMaxPartitions = 200
 
-  def readSchema: StructType = schema
+  var filters = Array.empty[Filter]
+
+  val rowKeyColumn = options.get("rowKey").orElse("rowKey")
+
+  // needs to be nullable so that Avro doesn't barf when we want to add another column
+  var requiredSchema = schema.add(rowKeyColumn, DataTypes.StringType, true)
+
+  // SupportsPushDownRequiredColumns implementation
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+      this.requiredSchema = requiredSchema
+  }
+
+  def readSchema: StructType = requiredSchema
+
+  // SupportsPushDownFilters 
+  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+    println("MARKUS PUSHFULTERS!!!!!!!!!!!")
+    println(filters)
+
+      // https://spark.apache.org/docs/2.1.1/api/java/org/apache/spark/sql/sources/Filter.html
+      val (supported, unsupported) = filters.partition {
+        case GreaterThan("i", _: Int) => true
+        case _ => false
+      }
+      this.filters = supported
+      unsupported
+  }
+
+  override def pushedFilters(): Array[Filter] = filters
 
   def planInputPartitions: java.util.List[InputPartition[InternalRow]] = {
     val tableName = options.tableName.get
     val maxPartitions = options.getInt("maxPartitions", defaultMaxPartitions) - 1
     val properties = new java.util.Properties()
     properties.putAll(options.asMap())
-
-    val rowKeyColumn = options.get("rowKey").orElse("rowKey")
 
     val splits = ArrayBuffer(new Text("-inf").getBytes, new Text("inf").getBytes)
     splits.insertAll(1,
@@ -42,7 +75,7 @@ class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
 
     new java.util.ArrayList[InputPartition[InternalRow]](
       (1 until splits.length).map(i =>
-        new PartitionReaderFactory(tableName, splits(i - 1), splits(i), schema, properties, rowKeyColumn)
+        new PartitionReaderFactory(tableName, splits(i - 1), splits(i), requiredSchema, properties, rowKeyColumn)
       ).asJava
     )
   }
