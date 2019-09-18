@@ -8,6 +8,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.writer.{DataSourceWriter, DataWriter, DataWriterFactory, WriterCommitMessage}
 import org.apache.spark.sql.types.StructType
+import scala.collection.JavaConverters._
 
 class AccumuloDataSourceWriter(schema: StructType, mode: SaveMode, options: DataSourceOptions)
   extends DataSourceWriter {
@@ -15,7 +16,8 @@ class AccumuloDataSourceWriter(schema: StructType, mode: SaveMode, options: Data
   override def createWriterFactory(): DataWriterFactory[InternalRow] = {
     val tableName = options.tableName.get
     val properties = new java.util.Properties()
-    properties.putAll(options.asMap())
+    // can use .putAll(options.asMap()) due to https://github.com/scala/bug/issues/10418
+    options.asMap.asScala.foreach { case (k, v) => properties.setProperty(k, v) }
 
     new AccumuloDataWriterFactory(tableName, schema, mode, properties)
   }

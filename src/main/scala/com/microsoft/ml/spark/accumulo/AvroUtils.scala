@@ -2,7 +2,8 @@ package com.microsoft.ml.spark.accumulo
 
 import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.spark.sql.types.{DataType, DataTypes, StructType}
-import org.codehaus.jackson.map.ObjectMapper
+import org.codehaus.jackson.map.{ObjectMapper}
+import org.codehaus.jackson.map.annotate.JsonSerialize.Inclusion
 
 import scala.beans.BeanProperty
 
@@ -37,9 +38,14 @@ object AvroUtils {
           ))
       })
 
-    try
-      new ObjectMapper().writeValueAsString(selectedFields)
-    catch {
+    try {
+      val mapper = new ObjectMapper()
+
+      // disable serialization of null-values
+      mapper.setSerializationInclusion(Inclusion.NON_NULL)
+
+      mapper.writeValueAsString(selectedFields)
+    } catch {
       case e: Exception =>
         throw new IllegalArgumentException(e)
     }

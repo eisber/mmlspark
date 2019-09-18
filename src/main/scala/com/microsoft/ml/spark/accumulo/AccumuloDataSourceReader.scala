@@ -10,6 +10,7 @@ import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader.{DataSourceReader, InputPartition, InputPartitionReader}
 import org.apache.spark.sql.types.{DataTypes, StructType}
 import org.apache.spark.sql.sources.{Filter, GreaterThan}
+import scala.collection.JavaConverters._
 
 // TODO: https://github.com/apache/spark/blob/053dd858d38e6107bc71e0aa3a4954291b74f8c8/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/SupportsReportPartitioning.java
 // in head of spark github repo
@@ -43,9 +44,9 @@ class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
 
   // SupportsPushDownFilters 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
-    println("MARKUS PUSHFULTERS!!!!!!!!!!!")
+    println("MARKUS PUSHFILTERS!!!!!!!!!!!")
     println(filters)
-
+/*
       // https://spark.apache.org/docs/2.1.1/api/java/org/apache/spark/sql/sources/Filter.html
       val (supported, unsupported) = filters.partition {
         case GreaterThan("i", _: Int) => true
@@ -53,6 +54,8 @@ class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
       }
       this.filters = supported
       unsupported
+*/
+    filters
   }
 
   override def pushedFilters(): Array[Filter] = filters
@@ -61,7 +64,8 @@ class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
     val tableName = options.tableName.get
     val maxPartitions = options.getInt("maxPartitions", defaultMaxPartitions) - 1
     val properties = new java.util.Properties()
-    properties.putAll(options.asMap())
+    // can use .putAll(options.asMap()) due to https://github.com/scala/bug/issues/10418
+    options.asMap.asScala.foreach { case (k, v) => properties.setProperty(k, v) }
 
     val splits = ArrayBuffer(new Text("-inf").getBytes, new Text("inf").getBytes)
     splits.insertAll(1,
