@@ -50,8 +50,10 @@ class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     val result = FilterToJuel.serializeFilters(filters, jsonSchema.attributeToVariableMapping)
 
-    this.filterInJuel = Some(result.serializedFilter)
     this.filters = result.supportedFilters.toArray
+
+    if (this.filters.length > 0)
+      this.filterInJuel = Some(result.serializedFilter)
 
     result.unsupportedFilters.toArray
   }

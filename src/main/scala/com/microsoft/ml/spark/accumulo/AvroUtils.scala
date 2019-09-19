@@ -1,7 +1,7 @@
 package com.microsoft.ml.spark.accumulo
 
 import org.apache.avro.{Schema, SchemaBuilder}
-import org.apache.spark.sql.types.{DataType, DataTypes, StructType}
+import org.apache.spark.sql.types.{DataType, DataTypes, StructField, StructType}
 import org.codehaus.jackson.map.{ObjectMapper}
 import org.codehaus.jackson.map.annotate.JsonSerialize.Inclusion
 
@@ -68,39 +68,40 @@ object AvroUtils {
   }
 
   implicit class CatalystSchemaToAvroRecordBuilder(builder: SchemaBuilder.FieldAssembler[Schema]) {
-    def addAvroRecordFields(schema: StructType): SchemaBuilder.FieldAssembler[Schema] = {
-      schema.fields.foldLeft(builder) { (builder, field) =>
-          (field.dataType, field.nullable) match {
-            case (DataTypes.BinaryType, true) => builder.optionalBytes(field.name)
-            case (DataTypes.BinaryType, false) => builder.requiredBytes(field.name)
-            case (DataTypes.BooleanType, true) => builder.optionalBoolean(field.name)
-            case (DataTypes.BooleanType, false) => builder.requiredBoolean(field.name)
-            case (DataTypes.DoubleType, true) => builder.optionalDouble(field.name)
-            case (DataTypes.DoubleType, false) => builder.requiredDouble(field.name)
-            case (DataTypes.FloatType, true) => builder.optionalFloat(field.name)
-            case (DataTypes.FloatType, false) => builder.requiredFloat(field.name)
-            case (DataTypes.IntegerType, true) => builder.optionalInt(field.name)
-            case (DataTypes.IntegerType, false) => builder.requiredInt(field.name)
-            case (DataTypes.LongType, true) => builder.optionalLong(field.name)
-            case (DataTypes.LongType, false) => builder.requiredLong(field.name)
-            case (DataTypes.StringType, true) => builder.optionalString(field.name)
-            case (DataTypes.StringType, false) => builder.requiredString(field.name)
-            // TODO: date/time support?
-            case _ => throw new UnsupportedOperationException(s"Unsupported type: $field.dataType")
-        }
+    def addAvroRecordField(field: StructField): SchemaBuilder.FieldAssembler[Schema] = {
+      (field.dataType, field.nullable) match {
+          case (DataTypes.BinaryType, true) => builder.optionalBytes(field.name)
+          case (DataTypes.BinaryType, false) => builder.requiredBytes(field.name)
+          case (DataTypes.BooleanType, true) => builder.optionalBoolean(field.name)
+          case (DataTypes.BooleanType, false) => builder.requiredBoolean(field.name)
+          case (DataTypes.DoubleType, true) => builder.optionalDouble(field.name)
+          case (DataTypes.DoubleType, false) => builder.requiredDouble(field.name)
+          case (DataTypes.FloatType, true) => builder.optionalFloat(field.name)
+          case (DataTypes.FloatType, false) => builder.requiredFloat(field.name)
+          case (DataTypes.IntegerType, true) => builder.optionalInt(field.name)
+          case (DataTypes.IntegerType, false) => builder.requiredInt(field.name)
+          case (DataTypes.LongType, true) => builder.optionalLong(field.name)
+          case (DataTypes.LongType, false) => builder.requiredLong(field.name)
+          case (DataTypes.StringType, true) => builder.optionalString(field.name)
+          case (DataTypes.StringType, false) => builder.requiredString(field.name)
+          // TODO: date/time support?
+          case _ => throw new UnsupportedOperationException(s"Unsupported type: $field.dataType")
       }
+    }
+
+    def addAvroRecordFields(schema: StructType): SchemaBuilder.FieldAssembler[Schema] = {
+      schema.fields.foldLeft(builder) { (builder, field) => builder.addAvroRecordField(field) }
     }
   }
 
-  // TODO: can this be replaced with org.apache.avro.Schema.Parser().parse() ?
   def catalystSchemaToAvroSchema(schema: StructType): Schema = {
     val fieldBuilder = SchemaBuilder.record("root")
       .fields()
 
     schema.fields.foldLeft(fieldBuilder) { (builder, field) =>
         field.dataType match {
+          // nested fields
           case cft: StructType =>
-            // builder.record(field.name).fields().nullableBoolean().endRecord()
             fieldBuilder
               .name(field.name)
               .`type`(SchemaBuilder
@@ -109,8 +110,8 @@ object AvroUtils {
                 .addAvroRecordFields(cft)
                 .endRecord())
               .noDefault()
-   
-          case _ => builder // just skip top-level non-struct fields
+          // top level fields
+          case _ => fieldBuilder.addAvroRecordField(field)
         }
       }
       .endRecord()
