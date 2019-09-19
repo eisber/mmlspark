@@ -48,7 +48,13 @@ class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
   def readSchema: StructType = requiredSchema
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
-    val result = FilterToJuel.serializeFilters(filters, jsonSchema.attributeToVariableMapping)
+    // unfortunately predicates on nested elements are not pushed down by Spark
+    // https://issues.apache.org/jira/browse/SPARK-17636
+    // https://github.com/apache/spark/pull/22535
+    // val filtersStr = filters.mkString(",")
+    // println(s"\nINPUT FILTER: ${filtersStr}")
+
+    val result = new FilterToJuel(jsonSchema.attributeToVariableMapping).serializeFilters(filters)
 
     this.filters = result.supportedFilters.toArray
 
