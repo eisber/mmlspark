@@ -24,12 +24,12 @@ class VerifyAccumuloSchema extends TestBase {
         , true))
       .add("cf3", DataTypes.StringType, false)
 
-    val jsonActual = AvroUtils.catalystSchemaToJson(schema)
-    val jsonExpected = "[{\"cf\":\"cf1\",\"cq\":\"cq1\",\"fvn\":\"v1\",\"t\":\"STRING\"}" +
-      ",{\"cf\":\"cf1\",\"cq\":\"cq2\",\"fvn\":\"v2\",\"t\":\"DOUBLE\"}" +
-      ",{\"cf\":\"cf2\",\"cq\":\"cq_a\",\"fvn\":\"v3\",\"t\":\"INTEGER\"}" +
-      ",{\"cf\":\"cf2\",\"cq\":\"cq_b\",\"fvn\":\"v4\",\"t\":\"FLOAT\"}" +
-      ",{\"cf\":\"cf3\",\"fvn\":\"v5\",\"t\":\"STRING\"}]"
+    val jsonActual = AvroUtils.catalystSchemaToJson(schema).json
+    val jsonExpected = "[{\"cf\":\"cf1\",\"cq\":\"cq1\",\"fvn\":\"v0\",\"t\":\"STRING\"}" +
+      ",{\"cf\":\"cf1\",\"cq\":\"cq2\",\"fvn\":\"v1\",\"t\":\"DOUBLE\"}" +
+      ",{\"cf\":\"cf2\",\"cq\":\"cq_a\",\"fvn\":\"v2\",\"t\":\"INTEGER\"}" +
+      ",{\"cf\":\"cf2\",\"cq\":\"cq_b\",\"fvn\":\"v3\",\"t\":\"FLOAT\"}" +
+      ",{\"cf\":\"cf3\",\"fvn\":\"v4\",\"t\":\"STRING\"}]"
 
     println(s"actual:   $jsonActual")
     println(s"expected: $jsonExpected")
@@ -48,7 +48,6 @@ class VerifyAccumuloSchema extends TestBase {
         .add("cq_a", DataTypes.IntegerType, true)
         .add("cq_b", DataTypes.FloatType, true)
         , true))
-      .add("rowKey", DataTypes.StringType, false)
 
     val avroSchema = AvroUtils.catalystSchemaToAvroSchema(schema)
 
