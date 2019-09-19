@@ -25,24 +25,25 @@ object FilterToJuel {
 		}
 	}
 
-	def serializeFilter(filter: Filter): String = {
+	def serializeFilter(filter: Filter, attributeToVariableMapping: Map[String, String]): String = {
+		val m = attributeToVariableMapping
 		filter match {
-			case op: And => s"(${serializeFilter(op.left)} && ${serializeFilter(op.right)})"
-			case op: Or => s"(${serializeFilter(op.left)} || ${serializeFilter(op.right)})"
-			case op: EqualTo =>  s"(${op.attribute} == ${serializeValue(op.value)})"
-			case op: GreaterThan => s"(${op.attribute} > ${serializeValue(op.value)})"
-			case op: GreaterThanOrEqual => s"(${op.attribute} >= ${serializeValue(op.value)})"
-			case op: LessThan => s"(${op.attribute} < ${serializeValue(op.value)})"
-			case op: LessThanOrEqual => s"(${op.attribute} <= ${serializeValue(op.value)})"
-			case op: Not => s"(!${serializeFilter(op.child)})"
-			case op: IsNull => s"(${op.attribute} == null)"
-			case op: IsNotNull => s"(${op.attribute} != null)"
-			case op: StringContains => s"${op.attribute}.contains(${serializeValue(op.value)})"
-			case op: StringStartsWith => s"${op.attribute}.startsWith(${serializeValue(op.value)})"
-			case op: StringEndsWith => s"${op.attribute}.endsWith(${serializeValue(op.value)})"
+			case op: And => s"(${serializeFilter(op.left, m)} && ${serializeFilter(op.right, m)})"
+			case op: Or => s"(${serializeFilter(op.left, m)} || ${serializeFilter(op.right, m)})"
+			case op: EqualTo =>  s"(${m.get(op.attribute).get} == ${serializeValue(op.value)})"
+			case op: GreaterThan => s"(${m.get(op.attribute).get} > ${serializeValue(op.value)})"
+			case op: GreaterThanOrEqual => s"(${m.get(op.attribute).get} >= ${serializeValue(op.value)})"
+			case op: LessThan => s"(${m.get(op.attribute).get} < ${serializeValue(op.value)})"
+			case op: LessThanOrEqual => s"(${m.get(op.attribute).get} <= ${serializeValue(op.value)})"
+			case op: Not => s"(!${serializeFilter(op.child, m)})"
+			case op: IsNull => s"(${m.get(op.attribute).get} == null)"
+			case op: IsNotNull => s"(${m.get(op.attribute).get} != null)"
+			case op: StringContains => s"${m.get(op.attribute).get}.contains(${serializeValue(op.value)})"
+			case op: StringStartsWith => s"${m.get(op.attribute).get}.startsWith(${serializeValue(op.value)})"
+			case op: StringEndsWith => s"${m.get(op.attribute).get}.endsWith(${serializeValue(op.value)})"
 			case op: In => {
 				val values = op.values.map { v => serializeValue(v) } .mkString(",")
-				s"${op.attribute}.in(${values})"
+				s"${m.get(op.attribute).get}.in(${values})"
 			}
 			// TODO: not sure if null handling is properly done
 			// TODO:  EqualNullSafe
@@ -50,11 +51,12 @@ object FilterToJuel {
 		}
 	}
 
-	def serializeFilters(filters: Array[Filter]): AccumuloFilterResult = {
+	def serializeFilters(filters: Array[Filter], attributeToVariableMapping: Map[String, String]): AccumuloFilterResult =
+	{
 		val (supported, unsupported) = filters.map({ f => {
 
 			try {
-				(serializeFilter(f), f)
+				(serializeFilter(f, attributeToVariableMapping), f)
 			} catch {
 				case e: UnsupportedOperationException => ("", f)
 			}

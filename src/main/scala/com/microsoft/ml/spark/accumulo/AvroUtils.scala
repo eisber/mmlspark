@@ -13,9 +13,13 @@ case class SchemaMappingField(@BeanProperty val cf: String, // column family
                               @BeanProperty val fvn: String, // filter variable name
                               @BeanProperty val t: String) // type
 
+case class JsonSchema(val json: String, attributeToVariableMapping: Map[String, String])
+
 @SerialVersionUID(1L)
 object AvroUtils {
-  def catalystSchemaToJson(schema: StructType): String = {
+  def catalystSchemaToJson(schema: StructType): JsonSchema = {
+
+    var attributeToVariableMapping = scala.collection.mutable.Map[String,  String]()
 
     var i = 0
     val selectedFields = schema.fields.flatMap(cf =>
@@ -24,7 +28,13 @@ object AvroUtils {
           SchemaMappingField(
             cf.name,
             cq.name,
-            { i += 1; s"v${i}" },
+            {
+              val variableName = s"v${i}"
+              attributeToVariableMapping += (s"${cf.name}.${cq.name}" -> variableName)
+              i += 1
+
+              variableName
+            },
             // TODO: toUpperCase() is weird...
             cq.dataType.typeName.toUpperCase
           )
@@ -32,7 +42,13 @@ object AvroUtils {
         case _: DataType => Seq(SchemaMappingField(
             cf.name,
             null,
-            { i += 1; s"v${i}" },
+            {
+              val variableName = s"v${i}"
+              attributeToVariableMapping += (s"${cf.name}" -> variableName)
+              i += 1
+
+              variableName
+            },
             // TODO: toUpperCase() is weird...
             cf.dataType.typeName.toUpperCase
           ))
@@ -44,7 +60,7 @@ object AvroUtils {
       // disable serialization of null-values
       mapper.setSerializationInclusion(Inclusion.NON_NULL)
 
-      mapper.writeValueAsString(selectedFields)
+      JsonSchema(mapper.writeValueAsString(selectedFields), attributeToVariableMapping.toMap)
     } catch {
       case e: Exception =>
         throw new IllegalArgumentException(e)

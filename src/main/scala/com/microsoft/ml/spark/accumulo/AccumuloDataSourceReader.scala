@@ -33,9 +33,12 @@ class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
   val rowKeyColumn = options.get("rowKey").orElse("rowKey")
 
   // needs to be nullable so that Avro doesn't barf when we want to add another column
-  var requiredSchema = schema.add(rowKeyColumn, DataTypes.StringType, true)
+  private var requiredSchema = schema.add(rowKeyColumn, DataTypes.StringType, true)
 
-  var filterInJuel: Option[String] = None
+  private val schemaWithoutRowKey = new StructType(schema.fields.filter(_.name != rowKeyColumn))
+  private val jsonSchema = AvroUtils.catalystSchemaToJson(schemaWithoutRowKey)
+
+  private var filterInJuel: Option[String] = None
 
   // SupportsPushDownRequiredColumns implementation
   override def pruneColumns(requiredSchema: StructType): Unit = {
@@ -45,7 +48,7 @@ class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
   def readSchema: StructType = requiredSchema
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
-    val result = FilterToJuel.serializeFilters(filters)
+    val result = FilterToJuel.serializeFilters(filters, jsonSchema.attributeToVariableMapping)
 
     this.filterInJuel = Some(result.serializedFilter)
     this.filters = result.supportedFilters.toArray
@@ -74,7 +77,8 @@ class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
 
     new java.util.ArrayList[InputPartition[InternalRow]](
       (1 until splits.length).map(i =>
-        new PartitionReaderFactory(tableName, splits(i - 1), splits(i), requiredSchema, properties, rowKeyColumn, filterInJuel)
+        new PartitionReaderFactory(tableName, splits(i - 1), splits(i), requiredSchema, properties, rowKeyColumn,
+          jsonSchema.json, filterInJuel)
       ).asJava
     )
   }
@@ -86,9 +90,10 @@ class PartitionReaderFactory(tableName: String,
                              schema: StructType,
                              properties: java.util.Properties,
                              rowKeyColumn: String,
+                             jsonSchema: String,
                              filterInJuel: Option[String])
   extends InputPartition[InternalRow] {
   def createPartitionReader: InputPartitionReader[InternalRow] = {
-    new AccumuloInputPartitionReader(tableName, start, stop, schema, properties, rowKeyColumn, filterInJuel)
+    new AccumuloInputPartitionReader(tableName, start, stop, schema, properties, rowKeyColumn, jsonSchema, filterInJuel)
   }
 }
