@@ -54,12 +54,13 @@ class AccumuloDataSourceReader(schema: StructType, options: DataSourceOptions)
     // val filtersStr = filters.mkString(",")
     // println(s"\nINPUT FILTER: ${filtersStr}")
 
-    val result = new FilterToJuel(jsonSchema.attributeToVariableMapping).serializeFilters(filters)
+    val result = new FilterToJuel(jsonSchema.attributeToVariableMapping, rowKeyColumn)
+      .serializeFilters(filters, options.get("filter").orElse(""))
 
     this.filters = result.supportedFilters.toArray
 
-    if (this.filters.length > 0)
-      this.filterInJuel = Some(result.serializedFilter)
+    if (result.serializedFilter.length > 0)
+      this.filterInJuel = Some("${" + result.serializedFilter + "}")
 
     result.unsupportedFilters.toArray
   }

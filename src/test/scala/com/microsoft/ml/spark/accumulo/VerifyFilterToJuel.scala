@@ -64,12 +64,11 @@ class VerifyFilterToJuel extends TestBase {
       new EqualTo("k", 4)
     )
 
-    val result = FilterToJuel.serializeFilters(filters, map)
+    val result = FilterToJuel.serializeFilters(filters, map, None)
 
     assert("${(i0 == 5) && (j == 3) && (k == 4)}".equals(result.serializedFilter))
     assert(filters.length == result.supportedFilters.length)
 
     assert(result.unsupportedFilters.isEmpty)
-
   }
 }

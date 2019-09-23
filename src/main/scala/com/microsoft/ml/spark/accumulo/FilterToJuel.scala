@@ -9,15 +9,20 @@ case class AccumuloFilterResult(val serializedFilter: String,
 								val supportedFilters: Seq[Filter],
 								val unsupportedFilters: Seq[Filter])
 
-class FilterToJuel(val attributeToVariableMapping: Map[String, String]) {
+class FilterToJuel(val attributeToVariableMapping: Map[String, String], val rowKeyColumn: String = "rowKey") {
 	def mapAttribute(attribute: String): String = {
-		val opt = attributeToVariableMapping.get(attribute)
-
-		if (opt.isEmpty) {
-			println(s"UNABLE TO MAP attribute ${attribute}")
+		if (attribute == rowKeyColumn) {
+			"rowKey"
 		}
+		else {
+			val opt = attributeToVariableMapping.get(attribute)
 
-		opt.get
+			if (opt.isEmpty) {
+				println(s"UNABLE TO MAP attribute ${attribute}")
+			}
+
+			opt.get
+		}
 	}
 
 	def serializeValue(value: Any): String = {
@@ -69,7 +74,7 @@ class FilterToJuel(val attributeToVariableMapping: Map[String, String]) {
 		}
 	}
 
-	def serializeFilters(filters: Array[Filter]): AccumuloFilterResult =
+	def serializeFilters(filters: Array[Filter], filterStr: String): AccumuloFilterResult =
 	{
 		val (supported, unsupported) = filters.map({ f => {
 
@@ -80,10 +85,16 @@ class FilterToJuel(val attributeToVariableMapping: Map[String, String]) {
 			}
 		}}).partition(!_._1.isEmpty)
 
-		val filter = supported.map(_._1).mkString(" && ")
+		var filter = supported.map(_._1)
+
+		// append if provided
+		if (filterStr.length > 0)
+			filter :+ filterStr
+
+		val finalFilter = filter.mkString(" && ")
 
 		AccumuloFilterResult(
-			"${" + filter + "}",
+			finalFilter,
 			supported.map(_._2),
 			unsupported.map(_._2)
 		)
