@@ -89,7 +89,7 @@ class FilterToJuel(val attributeToVariableMapping: Map[String, String], val rowK
 
 		// append if provided
 		if (filterStr.length > 0)
-			filter :+ filterStr
+			filter = filter :+ s"(${filterStr})"
 
 		val finalFilter = filter.mkString(" && ")
 
