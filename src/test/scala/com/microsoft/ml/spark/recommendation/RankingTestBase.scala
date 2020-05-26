@@ -77,6 +77,12 @@ trait RankingTestBase extends TestBase {
     .setRatingCol(ratingCol)
     .setTimeCol("timestamp")
 
+  val sarplus: SARPlus = new SARPlus()
+    .setUserCol(recommendationIndexer.getUserOutputCol)
+    .setItemCol(recommendationIndexer.getItemOutputCol)
+    .setRatingCol(ratingCol)
+    .setTimeCol("timestamp")
+
   lazy val paramGrid: Array[ParamMap] = new ParamGridBuilder()
     .addGrid(als.regParam, Array(1.0))
     .build()

@@ -248,11 +248,15 @@ trait SARParams extends Wrappable with RecommendationParams {
 
   val timeDecayCoeff = new IntParam(this, "timeDecayCoeff", "Use to scale time decay coeff to different half life dur")
 
+  def setTimeDecayEnabled(value: Boolean): this.type = set(timeDecayEnabled, value)
+
+  val timeDecayEnabled = new BooleanParam(this, "timeDecay", "Set to true to enable time decay")
+
   def setStartTimeFormat(value: String): this.type = set(startTimeFormat, value)
 
   val startTimeFormat = new Param[String](this, "startTimeFormat", "Format for start time")
 
-  setDefault(timeDecayCoeff -> 30, activityTimeFormat -> "yyyy/MM/dd'T'h:mm:ss", supportThreshold -> 4,
-    ratingCol -> C.RatingCol, userCol -> C.UserCol, itemCol -> C.ItemCol, similarityFunction ->
+  setDefault(timeDecayCoeff -> 30, timeDecayEnabled -> true, activityTimeFormat -> "yyyy/MM/dd'T'h:mm:ss",
+    supportThreshold -> 4, ratingCol -> C.RatingCol, userCol -> C.UserCol, itemCol -> C.ItemCol, similarityFunction ->
       "jaccard", timeCol -> "time", startTimeFormat -> "EEE MMM dd HH:mm:ss Z yyyy")
 }
