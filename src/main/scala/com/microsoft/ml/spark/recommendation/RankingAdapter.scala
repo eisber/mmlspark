@@ -130,6 +130,7 @@ class RankingAdapterModel private[ml](val uid: String)
         this.getRecommenderModel match {
           case als: ALSModel => als.asInstanceOf[ALSModel].recommendForAllUsers(getK)
           case sar: SARModel => sar.asInstanceOf[SARModel].recommendForAllUsers(getK)
+          case sarplus: SARPlusModel => sarplus.asInstanceOf[SARPlusModel].recommendForAllUsers(getK)
         }
       case "normal"   => SparkHelpers.flatten(getRecommenderModel.transform(dataset), getK, getItemCol, getUserCol)
     }

@@ -25,6 +25,7 @@ class SARPlusSpec extends RankingTestBase with EstimatorFuzzing[SARPlus] {
       .setSupportThreshold(1)
       .setSimilarityFunction("jacccard")
 
+
     val adapter: RankingAdapter = new RankingAdapter()
       .setK(5)
       .setRecommender(algo)
@@ -39,16 +40,16 @@ class SARPlusSpec extends RankingTestBase with EstimatorFuzzing[SARPlus] {
       .setK(5)
       .setNItems(10)
 
-    assert(evaluator.setMetricName("ndcgAt").evaluate(output) == 0.7168486344464263)
-    assert(evaluator.setMetricName("fcp").evaluate(output) == 0.05000000000000001)
-    assert(evaluator.setMetricName("mrr").evaluate(output) == 1.0)
+    assert(evaluator.setMetricName("ndcgAt").evaluate(output) === 0.7168)
+    assert(evaluator.setMetricName("fcp").evaluate(output) === 0.05)
+    assert(evaluator.setMetricName("mrr").evaluate(output) === 1.0)
 
     val users: DataFrame = session
       .createDataFrame(Seq(("0","0"),("1","1")))
       .toDF(userColIndex, itemColIndex)
 
     val recs = recopipeline.stages(1).asInstanceOf[RankingAdapterModel].getRecommenderModel
-      .asInstanceOf[SARModel].recommendForUserSubset(users, 10)
+      .asInstanceOf[SARPlusModel].recommendForUserSubset(users, 10)
     assert(recs.count == 2)
   }
 }

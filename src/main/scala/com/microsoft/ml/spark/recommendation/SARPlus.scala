@@ -2,18 +2,17 @@ package com.microsoft.ml.spark.recommendation
 
 import com.microsoft.ml.spark.core.contracts.Wrappable
 import com.microsoft.ml.spark.core.env.InternalWrapper
-import com.microsoft.ml.spark.vw.TrainingResult
 import org.apache.spark.ml.param.{DataFrameParam, Param, ParamMap}
 import org.apache.spark.ml.{ComplexParamsReadable, ComplexParamsWritable, Estimator, Model}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable}
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.{DataFrame, Dataset, Encoders, Row}
-import org.apache.spark.sql.types.{DataType, DoubleType, FloatType, IntegerType, LongType, StructField, StructType}
-import org.apache.spark.sql.functions.{col, count, exp, max, row_number, sum, udf, window}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, IntegerType, LongType, StructField, StructType}
+import org.apache.spark.sql.functions.{col, collect_list, count, exp, max, row_number, sum, udf, window}
 import org.apache.spark.storage.StorageLevel
 import java.util.Arrays
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.ml.recommendation.Constants
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 
 import scala.collection.mutable
@@ -44,17 +43,23 @@ class SARPlus(override val uid: String) extends Estimator[SARPlusModel]
       df
 
   private def computeCoocurrence(df: DataFrame) = {
-    val dfLeft = df.alias("dfLeft")
-    val dfRight = df.alias("dfRight")
+    val dfLeft = df.select(
+      col($(userCol)).alias("u1"),
+      col($(itemCol)).alias("i1")
+    )
+
+    val dfRight = df.select(
+      col($(userCol)).alias("u2"),
+      col($(itemCol)).alias("i2")
+    )
 
     // compute co-occurrence above minimum threshold
     dfLeft
       .crossJoin(dfRight)
       .where(
-        (dfLeft.col($(userCol)) === dfRight.col($(userCol))) &&
-          (dfLeft.col($(itemCol)) <= dfRight.col($(itemCol))))
-      .groupBy(dfLeft.col($(itemCol)).alias("i1"),
-        dfRight.col($(itemCol)).alias("i2"))
+        (col("u1") === col("u2")) &&
+        (col("i1") <= col("i2")))
+      .groupBy("i1", "i2")
       .agg(count("*").alias("value"))
       .where(col("value") >= $(supportThreshold))
       .repartition(col("i1"), col("i2"))
@@ -69,13 +74,20 @@ class SARPlus(override val uid: String) extends Estimator[SARPlusModel]
           col("i1").alias("i"),
           col("value").alias("margin"))
 
-    val itemMarginal1 = itemMarginal.alias("marginal1")
-    val itemMarginal2 = itemMarginal.alias("marginal2")
+    val itemMarginal1 = itemMarginal.select(
+      col("i").alias("iref1"),
+      col("margin").alias("margin1")
+    )
+
+    val itemMarginal2 = itemMarginal.select(
+      col("i").alias("iref2"),
+      col("margin").alias("margin2")
+    )
 
     val itemCoocurrenceWithMarginals =
       itemCoocurrence
-        .join(itemMarginal1, col("i1") === itemMarginal1.col("i"))
-        .join(itemMarginal2, col("i2") === itemMarginal2.col("i"))
+        .join(itemMarginal1, col("i1") === col("iref1"))
+        .join(itemMarginal2, col("i2") === col("iref2"))
 
     $(similarityFunction) match {
       case "jaccard" =>
@@ -83,7 +95,7 @@ class SARPlus(override val uid: String) extends Estimator[SARPlusModel]
           col("i1"),
           col("i2"),
           (col("value") /
-            (itemMarginal1.col("margin") + itemMarginal2.col("margin") - col("value")))
+            (col("margin1") + col("margin2") - col("value")))
             .alias("value").cast(FloatType)
         )
       case "lift" =>
@@ -91,7 +103,7 @@ class SARPlus(override val uid: String) extends Estimator[SARPlusModel]
           col("i1"),
           col("i2"),
           (col("value") /
-            (itemMarginal1.col("margin") * itemMarginal2.col("margin")))
+            (col("margin1") * col("margin2")))
             .alias("value").cast(FloatType)
         )
       case _ => itemCoocurrence.select(
@@ -162,40 +174,30 @@ class SARPlus(override val uid: String) extends Estimator[SARPlusModel]
   }
 
   private def computeFastLookup(itemSimilarity: DataFrame, itemMapping: DataFrame) = {
-    val itemMapping1 = itemMapping.alias("itemMapping1")
-    val itemMapping2 = itemMapping.alias("itemMapping2")
-
-    val encoder = Encoders.kryo[SARModelInternal]
-
-    itemSimilarity
-      .orderBy("i1", "i2")
-      .join(itemMapping1, itemSimilarity.col("i1") === itemMapping1.col("i1"))
-      // TODO THIS JOIN IS BUGGGGGGY
-      .join(itemMapping2, itemSimilarity.col("i2") === itemMapping2.col("i1"))
-      .show(20)
-    itemMapping.show(10)
+    val itemMapping1 = itemMapping.select(
+      col("i1").alias("iref1"),
+      col("idx").alias("idx1")
+    )
+    val itemMapping2 = itemMapping.select(
+      col("i1").alias("iref2"),
+      col("idx").alias("idx2")
+    )
 
     val itemSimilarityCollected =
     itemSimilarity
-      .join(itemMapping1, itemSimilarity.col("i1") === itemMapping1.col("i1"))
-      .join(itemMapping2, itemSimilarity.col("i2") === itemMapping2.col("i1"))
+      .join(itemMapping1, col("i1") === col("iref1"))
+      .join(itemMapping2, col("i2") === col("iref2"))
       .select(
-        itemMapping1.col("idx").alias("i1"),
-        itemMapping2.col("idx").alias("i2"),
+        col("idx1").alias("i1"),
+        col("idx2").alias("i2"),
         col("value"))
       // TODO: with rangePartitions &  treeAggregate it should be possible to scale further
 //      .repartitionByRange(col("i1"))
 //      .sortWithinPartitions(col("i1"), col("i2"))
       .orderBy(col("i1"), col("i2"))
-//      .collect()
+      .collect()
 
-//    println(itemSimilarityCollected.head.schema)
-      itemSimilarityCollected.show(10)
-
-    computeFastLookupIndex(itemSimilarity, itemMapping, itemSimilarityCollected.collect.iterator)
-//      .coalesce(1)
-//      .mapPartitions(it => computeFastLookupIndex(itemSimilarity, itemMapping, it))(encoder)
-//      .collect().head
+    computeFastLookupIndex(itemSimilarity, itemMapping, itemSimilarityCollected.iterator)
   }
 
   def this() = this(Identifiable.randomUID("SARPlus"))
@@ -259,6 +261,43 @@ class SARPlusModel(override val uid: String) extends Model[SARPlusModel]
       .setItemMapping($(itemMapping))
       .setIndex($(index))
 
+  def recommendForAllUsers(numItems: Int): DataFrame =
+    recommendForUserSubset($(userDataFrame), numItems)
+
+  def recommendForUserSubset(users: DataFrame, numItems: Int): DataFrame = {
+//    val zipper = udf[Seq[(Double, Float)], Seq[Double], Seq[Float]](_.zip(_))
+    val zipper = udf((items: Seq[Double], scores: Seq[Float]) => {
+      // TODO: WHY does the sort order change the metric results?
+      items.zip(scores)
+        .sortWith(_._1 < _._1)
+      // TODO: don't get the implication of sort here
+//        .sortWith((x, y) => x._2 > y._2 || (x._2 == y._2 && x._1 < y._2))
+    })
+
+    val recommendationArrayType =
+      ArrayType(
+        StructType(Array(StructField(getItemCol, IntegerType),
+          StructField(getPredictionCol, FloatType))))
+
+    recommend(users, false, numItems)
+      .groupBy($(userCol))
+      // group items and scores into 2 arrays
+      .agg(
+        collect_list(col($(itemCol))).alias("items"),
+        collect_list(col("score")).alias("scores"))
+      // zip items and scores array up
+//      .selectExpr(
+//        $(userCol),
+//        s"array_zip(items, scores) AS ${Constants.Recommendations}")
+      // cast the array into the right type
+      .select(
+        col($(userCol)),
+//        col(Constants.Recommendations).cast(recommendationArrayType)
+        zipper(col("items"), col("scores"))
+          .alias(Constants.Recommendations).cast(recommendationArrayType)
+          )
+  }
+
   def recommend(dataset: DataFrame, removeSeen: Boolean, topK: Int): DataFrame = {
     val broadcastIndex = dataset.sparkSession.sparkContext.broadcast($(index))
 
@@ -266,43 +305,49 @@ class SARPlusModel(override val uid: String) extends Model[SARPlusModel]
 
     val encoder = RowEncoder(StructType(
       dataset.schema.apply($(userCol)) ::
-      StructField("idx", IntegerType, false) ::
-      StructField("score", FloatType, false) :: Nil))
+      StructField("idxOutput", IntegerType, true) ::
+      StructField("score", FloatType, true) :: Nil))
 
     val topItems = testDf
       .select(col($(userCol)))
+      .distinct()
       .repartition(col($(userCol)))
       .join($(userDataFrame), $(userDataFrame).col($(userCol)) === testDf.col($(userCol)))
-      .join($(itemMapping), col($(itemCol)) === col("i1"))
-      .select(col($(userCol)), col("idx"), col($(ratingCol)).cast(DoubleType))
+      .join($(itemMapping), $(userDataFrame).col($(itemCol)) === $(itemMapping).col("i1"))
+      .select(
+        testDf.col($(userCol)),
+        $(itemMapping).col("idx"),
+        $(userDataFrame).col($(ratingCol)).cast(DoubleType))
       .repartition(col($(userCol)))
       .sortWithinPartitions(col("idx"))
       .mapPartitions(it => {
-        if (it.hasNext) new ProcessingIterator(it, broadcastIndex.value, removeSeen, topK)
-        else Seq.empty[Row].iterator
+        new ProcessingIterator(it, broadcastIndex.value, removeSeen, topK)
      })(encoder)
 
-    topItems
-      .join($(itemMapping), col("i1") === col("idx"))
+    val x = topItems
+      .join($(itemMapping), col("idxOutput") === $(itemMapping).col("idx"))
       .select(
         col($(userCol)),
-        col($(itemCol)),
+        col("i1").alias($(itemCol)),
         col("score")
       )
+
+    x.orderBy($(userCol), "i1", "score").show(30)
+
+    x
   }
 
   class ProcessingIterator(it: Iterator[Row], val fastIndex: SARModelInternal, val removeSeen: Boolean, val topK: Int)
     extends Iterator[Row] {
-    var row: Row = it.next
+    var lastRow = Option.empty[Row]
     val topKItems = mutable.PriorityQueue[ItemScore]()(Ordering.by(is => -is.score))
-    var currentUserId: Any = null
 
-    override def hasNext: Boolean = !topKItems.isEmpty || it.hasNext
+    override def hasNext: Boolean = !topKItems.isEmpty || it.hasNext || !lastRow.isEmpty
 
     override def next(): Row = {
-      while (topKItems.isEmpty) {
+      if (topKItems.isEmpty) {
         // get all user items & ratings for 1 user
-        val (userItems, userRatings) = collectUserItems
+        val (userId, userItems, userRatings) = collectUserItems
 
         // initial seen items
         val seenItems = mutable.HashSet[Int]()
@@ -326,44 +371,59 @@ class SARPlusModel(override val uid: String) extends Model[SARPlusModel]
 
               if (relatedItemScore > 0) {
                 if (topKItems.size < topK)
-                  topKItems += ItemScore(relatedItem, relatedItemScore)
+                  topKItems += ItemScore(userId, relatedItem, relatedItemScore)
                 else {
                   if (topKItems.head.score < relatedItemScore) {
                     topKItems.dequeue
-                    topKItems += ItemScore(relatedItem, relatedItemScore)
+                    topKItems += ItemScore(userId, relatedItem, relatedItemScore)
                   }
                 }
               }
             }
           }
         }
+
+        // index is 0 to n. thus -1 won't match in the join when mapping back
+        if (topKItems.isEmpty)
+          topKItems += ItemScore(userId, -1, 0f)
       }
 
       val itemScore = topKItems.dequeue
-      Row.fromTuple((currentUserId, itemScore.idx, itemScore.score))
+      Row.fromTuple((itemScore.userId, itemScore.idx, itemScore.score))
     }
 
     private def collectUserItems() = {
       val userItemsBuilder = mutable.ArrayBuilder.make[Int]
       val userRatingsBuilder = mutable.ArrayBuilder.make[Double]
 
-      currentUserId = row.get(0)
+      // continue from last row if present
+      var row = if (lastRow.isEmpty)
+        it.next
+      else {
+        val v = lastRow.get
+        lastRow = None
+        v
+      }
+
+      val currentUserId = row.get(0)
       var loopCondition = true
       while (loopCondition) {
         userItemsBuilder += row.getInt(1)
         userRatingsBuilder += row.getDouble(2)
 
-        row = it.next
         if (it.hasNext) {
+          row = it.next
           val userId = row.get(0)
-          if (userId != currentUserId)
+          if (userId != currentUserId) {
             loopCondition = false
+            lastRow = Some(row)
+          }
         }
         else
           loopCondition = false
       }
 
-      (userItemsBuilder.result, userRatingsBuilder.result)
+      (currentUserId, userItemsBuilder.result, userRatingsBuilder.result)
     }
 
     /**
@@ -411,6 +471,7 @@ class SARPlusModel(override val uid: String) extends Model[SARPlusModel]
           if (contribPtr == contribEnd)
             return score
 
+          userItemId = userItems(userPtr)
           contribItemId = fastIndex.similarityItem2(contribPtr)
         }
       }
@@ -419,7 +480,7 @@ class SARPlusModel(override val uid: String) extends Model[SARPlusModel]
     }
   }
 
-  case class ItemScore(idx: Int, score: Float)
+  case class ItemScore(userId: Any, idx: Int, score: Float)
 
   override def transform(dataset: Dataset[_]): DataFrame =
     recommend(dataset.toDF, false, 5)
