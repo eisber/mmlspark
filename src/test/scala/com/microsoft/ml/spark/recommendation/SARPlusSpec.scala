@@ -18,6 +18,35 @@ class SARPlusSpec extends RankingTestBase with EstimatorFuzzing[SARPlus] {
 
   override def modelReader: SARPlusModel.type = SARPlusModel
 
+  test("SARPLusMovieLens") {
+    val sarplus = new SARPlus()
+      .setUserCol("userId")
+      .setItemCol("movieId")
+      .setRatingCol("rating")
+      .setTimeCol("timestamp")
+      .setSupportThreshold(3)
+
+    val df = session.read
+      .format("csv")
+      .option("inferSchema", "true")
+      .option("header", "true")
+      .load("/mnt/c/Data/MovieLens25m/ratings1m.csv")
+
+    df.show(10)
+
+    var t0 = System.nanoTime
+
+    val model = sarplus.fit(df)
+
+    println(s"TIME: ${java.time.Duration.of(System.nanoTime - t0, java.time.temporal.ChronoUnit.NANOS)}")
+    t0 = System.nanoTime
+
+    val recommendation = model.recommend(df, false, 5)
+
+    recommendation.show(10)
+    println(s"TIME: ${java.time.Duration.of(System.nanoTime - t0, java.time.temporal.ChronoUnit.NANOS)}")
+  }
+
   test("SARPlus") {
 
     val algo = sarplus

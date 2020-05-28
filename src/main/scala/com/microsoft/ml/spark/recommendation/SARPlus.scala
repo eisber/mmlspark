@@ -308,14 +308,16 @@ class SARPlusModel(override val uid: String) extends Model[SARPlusModel]
       StructField("idxOutput", IntegerType, true) ::
       StructField("score", FloatType, true) :: Nil))
 
-    val topItems = testDf
-      .select(col($(userCol)))
+    val userList = testDf
+      .select(col($(userCol)).as("USER_INPUT_COL")) // TODO: unique column name
       .distinct()
-      .repartition(col($(userCol)))
-      .join($(userDataFrame), $(userDataFrame).col($(userCol)) === testDf.col($(userCol)))
-      .join($(itemMapping), $(userDataFrame).col($(itemCol)) === $(itemMapping).col("i1"))
+      .repartition(col("USER_INPUT_COL"))
+
+    val topItems = userList
+      .join($(userDataFrame), $(userDataFrame).col($(userCol)) === col("USER_INPUT_COL"))
+      .join($(itemMapping), col($(itemCol)) === $(itemMapping).col("i1"))
       .select(
-        testDf.col($(userCol)),
+        $(userDataFrame).col($(userCol)),
         $(itemMapping).col("idx"),
         $(userDataFrame).col($(ratingCol)).cast(DoubleType))
       .repartition(col($(userCol)))
@@ -324,7 +326,7 @@ class SARPlusModel(override val uid: String) extends Model[SARPlusModel]
         new ProcessingIterator(it, broadcastIndex.value, removeSeen, topK)
      })(encoder)
 
-    val x = topItems
+    topItems
       .join($(itemMapping), col("idxOutput") === $(itemMapping).col("idx"))
       .select(
         col($(userCol)),
@@ -332,9 +334,9 @@ class SARPlusModel(override val uid: String) extends Model[SARPlusModel]
         col("score")
       )
 
-    x.orderBy($(userCol), "i1", "score").show(30)
+    // x.orderBy($(userCol), "i1", "score").show(30)
 
-    x
+//    x
   }
 
   class ProcessingIterator(it: Iterator[Row], val fastIndex: SARModelInternal, val removeSeen: Boolean, val topK: Int)
